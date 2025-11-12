@@ -8,15 +8,15 @@ if (session_status() == PHP_SESSION_NONE) {
 
 include "config/db.php";
 
-// HITUNG BERDASARKAN DESA/WILAYAH
-// Ambil semua wilayah/desa
-$wilayahQuery = $conn->query("SELECT DISTINCT kode_wilayah, nama FROM wilayah");
+// HITUNG BERDASARKAN DESA/WILAYAH - PERBAIKAN LOGIKA
+// Ambil hanya wilayah level desa
+$desaQuery = $conn->query("SELECT kode_wilayah, nama FROM wilayah WHERE level = 'desa'");
 $totalDesa = 0;
 $desaData = [];
 
-if ($wilayahQuery) {
-    while ($wilayah = $wilayahQuery->fetch_assoc()) {
-        $kodeWilayah = $wilayah['kode_wilayah'];
+if ($desaQuery) {
+    while ($desa = $desaQuery->fetch_assoc()) {
+        $kodeWilayah = $desa['kode_wilayah'];
         $totalDesa++;
         
         // Hitung lokasi dengan sinyal dan tanpa sinyal untuk desa ini
@@ -26,28 +26,48 @@ if ($wilayahQuery) {
                 SUM(CASE WHEN ketersediaan_sinyal = 'Yes' THEN 1 ELSE 0 END) as ada_sinyal,
                 SUM(CASE WHEN ketersediaan_sinyal = 'No' THEN 1 ELSE 0 END) as tidak_sinyal
             FROM lokasi 
-            WHERE kode_wilayah = '$kodeWilayah'
+            WHERE kode_wilayah = '$kodeWilayah' AND is_deleted = 0
         ");
         
         if ($sinyalQuery) {
             $sinyalData = $sinyalQuery->fetch_assoc();
+            
+            // LOGIKA PERBAIKAN: 
+            // - Jika ada lokasi dengan sinyal = 'Yes' ATAU belum ada data lokasi, maka desa ADA sinyal
+            // - Jika hanya ada lokasi dengan sinyal = 'No', maka desa TIDAK ADA sinyal
+            
+            $totalLokasi = $sinyalData['total_lokasi'];
+            $adaSinyal = $sinyalData['ada_sinyal'];
+            $tidakSinyal = $sinyalData['tidak_sinyal'];
+            
+            if ($totalLokasi == 0 || $adaSinyal > 0) {
+                // Desa belum melapor ATAU ada minimal 1 lokasi dengan sinyal = dianggap ADA sinyal
+                $statusDesa = 'Ada Sinyal';
+                $kategoriSinyal = 'ada_sinyal';
+            } else {
+                // Tidak ada lokasi dengan sinyal (semua 'No')
+                $statusDesa = 'Tidak Ada Sinyal';
+                $kategoriSinyal = 'tidak_sinyal';
+            }
+            
             $desaData[$kodeWilayah] = [
-                'nama' => $wilayah['nama'],
-                'total_lokasi' => $sinyalData['total_lokasi'],
-                'ada_sinyal' => $sinyalData['ada_sinyal'],
-                'tidak_sinyal' => $sinyalData['tidak_sinyal'],
-                'status' => $sinyalData['ada_sinyal'] > 0 ? 'Ada Sinyal' : 'Tidak Ada Sinyal'
+                'nama' => $desa['nama'],
+                'total_lokasi' => $totalLokasi,
+                'ada_sinyal' => $adaSinyal,
+                'tidak_sinyal' => $tidakSinyal,
+                'status' => $statusDesa,
+                'kategori' => $kategoriSinyal
             ];
         }
     }
 }
 
-// Hitung statistik desa
+// Hitung statistik desa berdasarkan kategori
 $desaAdaSinyal = 0;
 $desaTidakSinyal = 0;
 
 foreach ($desaData as $desa) {
-    if ($desa['ada_sinyal'] > 0) {
+    if ($desa['kategori'] === 'ada_sinyal') {
         $desaAdaSinyal++;
     } else {
         $desaTidakSinyal++;
@@ -57,18 +77,18 @@ foreach ($desaData as $desa) {
 // Hitung persentase
 $persentaseDesaAdaSinyal = $totalDesa > 0 ? round(($desaAdaSinyal / $totalDesa) * 100, 1) : 0;
 
-// Data lokasi untuk statistik lainnya
-$adaRes = $conn->query("SELECT COUNT(*) as jml FROM lokasi WHERE ketersediaan_sinyal='Yes'");
+// Data lokasi untuk statistik lainnya (untuk info tambahan)
+$adaRes = $conn->query("SELECT COUNT(*) as jml FROM lokasi WHERE ketersediaan_sinyal='Yes' AND is_deleted=0");
 $adaSinyal = $adaRes ? $adaRes->fetch_assoc()['jml'] : 0;
 
-$tidakRes = $conn->query("SELECT COUNT(*) as jml FROM lokasi WHERE ketersediaan_sinyal='No'");
+$tidakRes = $conn->query("SELECT COUNT(*) as jml FROM lokasi WHERE ketersediaan_sinyal='No' AND is_deleted=0");
 $tidakSinyal = $tidakRes ? $tidakRes->fetch_assoc()['jml'] : 0;
 
 // TAMBAHAN: Data lokasi terbaru (7 hari terakhir)
 $lokasiBaruQuery = $conn->query("
     SELECT COUNT(*) as total_baru 
     FROM lokasi 
-    WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+    WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND is_deleted=0
 ");
 $lokasiBaru = $lokasiBaruQuery ? $lokasiBaruQuery->fetch_assoc()['total_baru'] : 0;
 
@@ -77,7 +97,7 @@ $updateTerbaruQuery = $conn->query("
     SELECT COUNT(*) as total_update 
     FROM lokasi 
     WHERE updated_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-    AND updated_at != created_at
+    AND updated_at != created_at AND is_deleted=0
 ");
 $updateTerbaru = $updateTerbaruQuery ? $updateTerbaruQuery->fetch_assoc()['total_update'] : 0;
 
@@ -86,6 +106,7 @@ $dataTerbaruQuery = $conn->query("
     SELECT l.*, w.nama as nama_wilayah 
     FROM lokasi l 
     LEFT JOIN wilayah w ON l.kode_wilayah = w.kode_wilayah 
+    WHERE l.is_deleted=0
     ORDER BY l.created_at DESC 
     LIMIT 5
 ");
@@ -104,7 +125,7 @@ $statistikMingguanQuery = $conn->query("
         SUM(CASE WHEN ketersediaan_sinyal = 'Yes' THEN 1 ELSE 0 END) as ada_sinyal,
         SUM(CASE WHEN ketersediaan_sinyal = 'No' THEN 1 ELSE 0 END) as tidak_sinyal
     FROM lokasi 
-    WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+    WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND is_deleted=0
     GROUP BY DATE(created_at)
     ORDER BY tanggal DESC
 ");
@@ -115,8 +136,8 @@ if ($statistikMingguanQuery) {
     }
 }
 
-// Ambil data lokasi dengan semua field yang diperlukan (untuk peta - TIDAK DIUBAH)
-$dataLokasi = $conn->query("SELECT nama_tempat, koordinat, ketersediaan_sinyal, keterangan, kecepatan_sinyal, created_at FROM lokasi");
+// Ambil data lokasi dengan semua field yang diperlukan (untuk peta)
+$dataLokasi = $conn->query("SELECT nama_tempat, koordinat, ketersediaan_sinyal, keterangan, kecepatan_sinyal, created_at FROM lokasi WHERE is_deleted=0");
 $lokasiArray = [];
 if ($dataLokasi) {
     while ($row = $dataLokasi->fetch_assoc()) {
@@ -332,7 +353,7 @@ body {
 .stat-card.ada { border-left-color: var(--success); }
 .stat-card.tidak { border-left-color: var(--danger); }
 .stat-card.baru { border-left-color: var(--info); }
-.stat-card.update { border-left-color: var(--warning); }
+.stat-card.update { border-left-color: #ff6b00; }
 
 .stat-header {
     display: flex;
@@ -355,7 +376,7 @@ body {
 .stat-card.ada .stat-icon { background: rgba(76, 201, 240, 0.1); color: var(--success); }
 .stat-card.tidak .stat-icon { background: rgba(230, 57, 70, 0.1); color: var(--danger); }
 .stat-card.baru .stat-icon { background: rgba(114, 9, 183, 0.1); color: var(--info); }
-.stat-card.update .stat-icon { background: rgba(247, 37, 133, 0.1); color: var(--warning); }
+.stat-card.update .stat-icon { background: rgba(255, 107, 0, 0.1); color: #ff6b00; }
 
 .stat-badge {
     background: #e9ecef;
@@ -376,7 +397,7 @@ body {
 .stat-card.ada .stat-value { color: var(--success); }
 .stat-card.tidak .stat-value { color: var(--danger); }
 .stat-card.baru .stat-value { color: var(--info); }
-.stat-card.update .stat-value { color: var(--warning); }
+.stat-card.update .stat-value { color: #ff6b00; }
 
 .stat-label {
     color: #6c757d;
@@ -966,7 +987,7 @@ body {
             </div>
             <div class="quick-stat-card">
                 <div class="quick-stat-number"><?= $totalDesa ?></div>
-                <div class="quick-stat-label">Total Desa Terpetakan</div>
+                <div class="quick-stat-label">Total Desa Terdaftar</div>
             </div>
         </div>
 
@@ -980,7 +1001,7 @@ body {
                     <div class="stat-badge">DESA</div>
                 </div>
                 <div class="stat-value"><?= number_format($totalDesa) ?></div>
-                <div class="stat-label">Total Desa Terpetakan</div>
+                <div class="stat-label">Total Desa Terdaftar</div>
                 <div class="stat-details">
                     <div class="stat-detail">
                         <i class="fas fa-check-circle" style="color: var(--success);"></i>
@@ -1030,7 +1051,7 @@ body {
                     </div>
                     <div class="stat-detail">
                         <i class="fas fa-percentage"></i>
-                        <span><?= 100 - $persentaseDesaAdaSinyal ?>% dari total</span>
+                        <span><?= round(($desaTidakSinyal / $totalDesa) * 100, 1) ?>% dari total</span>
                     </div>
                 </div>
             </div>

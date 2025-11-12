@@ -1,6 +1,10 @@
 <?php
 include "config/db.php";
 
+// Enable error reporting untuk debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 $type = $_GET['type'] ?? '';
 $provinsi = $_GET['provinsi'] ?? '';
 $kota = $_GET['kota'] ?? '';
@@ -9,19 +13,46 @@ $desa = $_GET['desa'] ?? '';
 
 header('Content-Type: application/json');
 
-// ----------------- DROPDOWN -----------------
-if(in_array($type, ['provinsi', 'kota', 'kecamatan', 'desa'])) {
-    $res = [];
+// Cek koneksi database
+if (!$conn) {
+    echo json_encode(['error' => 'Database connection failed: ' . $conn->connect_error]);
+    exit;
+}
 
-    try {
+try {
+    // ----------------- DROPDOWN -----------------
+    if(in_array($type, ['provinsi', 'kota', 'kecamatan', 'desa'])) {
+        $res = [];
+
         if ($type == 'provinsi') {
             $q = $conn->query("SELECT kode_wilayah, nama FROM wilayah WHERE level='provinsi' ORDER BY nama ASC");
         } elseif ($type == 'kota') {
-            $q = $conn->query("SELECT kode_wilayah, nama FROM wilayah WHERE level='kota' AND parent_kode='$provinsi' ORDER BY nama ASC");
+            if (empty($provinsi)) {
+                echo json_encode(['error' => 'Provinsi is required for kota dropdown']);
+                exit;
+            }
+            $stmt = $conn->prepare("SELECT kode_wilayah, nama FROM wilayah WHERE level='kota' AND parent_kode=? ORDER BY nama ASC");
+            $stmt->bind_param('s', $provinsi);
+            $stmt->execute();
+            $q = $stmt->get_result();
         } elseif ($type == 'kecamatan') {
-            $q = $conn->query("SELECT kode_wilayah, nama FROM wilayah WHERE level='kecamatan' AND parent_kode='$kota' ORDER BY nama ASC");
+            if (empty($kota)) {
+                echo json_encode(['error' => 'Kota is required for kecamatan dropdown']);
+                exit;
+            }
+            $stmt = $conn->prepare("SELECT kode_wilayah, nama FROM wilayah WHERE level='kecamatan' AND parent_kode=? ORDER BY nama ASC");
+            $stmt->bind_param('s', $kota);
+            $stmt->execute();
+            $q = $stmt->get_result();
         } elseif ($type == 'desa') {
-            $q = $conn->query("SELECT kode_wilayah, nama FROM wilayah WHERE level='desa' AND parent_kode='$kecamatan' ORDER BY nama ASC");
+            if (empty($kecamatan)) {
+                echo json_encode(['error' => 'Kecamatan is required for desa dropdown']);
+                exit;
+            }
+            $stmt = $conn->prepare("SELECT kode_wilayah, nama FROM wilayah WHERE level='desa' AND parent_kode=? ORDER BY nama ASC");
+            $stmt->bind_param('s', $kecamatan);
+            $stmt->execute();
+            $q = $stmt->get_result();
         }
 
         if (!$q) {
@@ -33,184 +64,251 @@ if(in_array($type, ['provinsi', 'kota', 'kecamatan', 'desa'])) {
         }
         
         echo json_encode($res);
-        
-    } catch (Exception $e) {
-        echo json_encode(['error' => $e->getMessage()]);
+        exit;
     }
-    exit;
-}
 
-// ----------------- STATISTIK TABEL -----------------
-if ($type == 'statistik') {
-    $res = [];
-    
-    try {
-        $where = [];
-        $params = [];
+    // ----------------- STATISTIK TABEL -----------------
+    if ($type == 'statistik') {
+        $res = [];
         
-        // Build WHERE conditions dengan prepared statements
-        if (!empty($provinsi)) {
-            $where[] = "p.kode_wilayah = ?";
-            $params[] = $provinsi;
-        }
-        if (!empty($kota)) {
-            $where[] = "k.kode_wilayah = ?";
-            $params[] = $kota;
-        }
-        if (!empty($kecamatan)) {
-            $where[] = "c.kode_wilayah = ?";
-            $params[] = $kecamatan;
-        }
+        // Jika level desa, ambil detail lokasi
         if (!empty($desa)) {
-            $where[] = "d.kode_wilayah = ?";
-            $params[] = $desa;
-        }
-        
-        $whereSQL = !empty($where) ? "WHERE " . implode(' AND ', $where) : '';
-
-        // Tentukan level dan field yang sesuai
-        $level = '';
-        $countField = '';
-        
-        if (!empty($desa)) {
-            // Level Desa → tampil detail lokasi di desa tersebut
-            $level = 'desa';
-            $groupBy = 'l.kode_lokasi, l.nama_tempat, l.koordinat, l.keterangan, l.ketersediaan_sinyal, l.kecepatan_sinyal';
-            $selectField = 'l.nama_tempat, l.kode_lokasi, l.koordinat, l.keterangan, l.ketersediaan_sinyal, l.kecepatan_sinyal';
-            $orderField = 'l.nama_tempat';
-            $countField = 'l.kode_lokasi';
-            $countSQL = "1 AS jumlah";
-            
-        } elseif (!empty($kecamatan)) {
-            // Filter sampai Kecamatan → tampil nama Desa
-            $level = 'kecamatan';
-            $groupBy = 'd.kode_wilayah, d.nama';
-            $selectField = 'd.nama AS nama, d.kode_wilayah AS kode_wilayah';
-            $orderField = 'd.nama';
-            $countField = 'd.kode_wilayah';
-            $countSQL = "COUNT(DISTINCT l.kode_lokasi) AS jumlah";
-            
-        } elseif (!empty($kota)) {
-            // Filter sampai Kota → tampil nama Kecamatan
-            $level = 'kota';
-            $groupBy = 'c.kode_wilayah, c.nama';
-            $selectField = 'c.nama AS nama, c.kode_wilayah AS kode_wilayah';
-            $orderField = 'c.nama';
-            $countField = 'c.kode_wilayah';
-            $countSQL = "COUNT(DISTINCT d.kode_wilayah) AS jumlah";
-            
-        } elseif (!empty($provinsi)) {
-            // Filter Provinsi saja → tampil nama Kota
-            $level = 'provinsi';
-            $groupBy = 'k.kode_wilayah, k.nama';
-            $selectField = 'k.nama AS nama, k.kode_wilayah AS kode_wilayah';
-            $orderField = 'k.nama';
-            $countField = 'k.kode_wilayah';
-            $countSQL = "COUNT(DISTINCT c.kode_wilayah) AS jumlah";
-            
-        } else {
-            // DEFAULT → HANYA tampil Provinsi saja (level nasional)
-            $level = 'nasional';
-            $groupBy = 'p.kode_wilayah, p.nama';
-            $selectField = 'p.nama AS nama, p.kode_wilayah AS kode_wilayah';
-            $orderField = 'p.nama';
-            $countField = 'p.kode_wilayah';
-            $countSQL = "COUNT(DISTINCT k.kode_wilayah) AS jumlah";
-            
-            // TAMBAHKAN WHERE CLAUSE untuk memastikan hanya data provinsi yang diambil
-            $whereSQL = "WHERE p.level = 'provinsi'";
-        }
-
-        // Query utama
-        if ($level === 'desa') {
-            // Untuk level desa (detail lokasi) - ambil semua field dari tabel lokasi
-            $sql = "SELECT
+            $sql = "SELECT 
                         l.kode_lokasi,
                         l.nama_tempat,
                         l.koordinat,
                         l.keterangan,
                         l.ketersediaan_sinyal,
                         l.kecepatan_sinyal,
-                        1 AS jumlah
+                        d.nama as nama_desa
                     FROM lokasi l
                     INNER JOIN wilayah d ON l.kode_wilayah = d.kode_wilayah
-                    INNER JOIN wilayah c ON d.parent_kode = c.kode_wilayah
-                    INNER JOIN wilayah k ON c.parent_kode = k.kode_wilayah
-                    INNER JOIN wilayah p ON k.parent_kode = p.kode_wilayah
-                    $whereSQL
+                    WHERE l.kode_wilayah = ? AND l.is_deleted = 0
                     ORDER BY l.nama_tempat ASC";
-                    
-        } else {
-            // Untuk level kecamatan ke atas
-            $sql = "SELECT
-                        $selectField,
-                        $countSQL,
-                        COALESCE(SUM(CASE WHEN LOWER(TRIM(COALESCE(l.ketersediaan_sinyal, ''))) = 'yes' THEN 1 ELSE 0 END), 0) AS ada,
-                        COALESCE(SUM(CASE WHEN LOWER(TRIM(COALESCE(l.ketersediaan_sinyal, ''))) = 'no' THEN 1 ELSE 0 END), 0) AS tidak
-                    FROM wilayah p
-                    LEFT JOIN wilayah k ON p.kode_wilayah = k.parent_kode AND k.level = 'kota'
-                    LEFT JOIN wilayah c ON k.kode_wilayah = c.parent_kode AND c.level = 'kecamatan'  
-                    LEFT JOIN wilayah d ON c.kode_wilayah = d.parent_kode AND d.level = 'desa'
-                    LEFT JOIN lokasi l ON d.kode_wilayah = l.kode_wilayah
-                    $whereSQL
-                    GROUP BY $groupBy
-                    HAVING COUNT(DISTINCT $countField) > 0
-                    ORDER BY $orderField ASC";
-        }
-
-        // Debug: Log SQL
-        error_log("Level: " . $level);
-        error_log("Statistik SQL: " . $sql);
-        error_log("Parameters: " . implode(', ', $params));
-        error_log("Where SQL: " . $whereSQL);
-
-        // Gunakan prepared statement jika ada parameter
-        if (!empty($params)) {
+            
             $stmt = $conn->prepare($sql);
-            if ($stmt) {
-                // Bind parameters
-                $types = str_repeat('s', count($params));
-                $stmt->bind_param($types, ...$params);
-                $stmt->execute();
-                $q = $stmt->get_result();
-            } else {
-                throw new Exception("Failed to prepare statement: " . $conn->error);
+            if (!$stmt) {
+                throw new Exception("Prepare failed: " . $conn->error);
             }
+            $stmt->bind_param('s', $desa);
+            $stmt->execute();
+            $q = $stmt->get_result();
+            
+            while ($r = $q->fetch_assoc()) {
+                $res[] = $r;
+            }
+            
         } else {
-            $q = $conn->query($sql);
-        }
-
-        if (!$q) {
-            throw new Exception($conn->error);
-        }
-
-        while ($r = $q->fetch_assoc()) {
-            // Untuk level desa, ambil data langsung dari tabel lokasi
-            if ($level === 'desa') {
-                // Pastikan ketersediaan_sinyal konsisten
-                $r['ketersediaan_sinyal'] = trim($r['ketersediaan_sinyal'] ?? '');
-                $r['kecepatan_sinyal'] = intval($r['kecepatan_sinyal'] ?? 0);
+            // Untuk level di atas desa (statistik berdasarkan desa)
+            if (!empty($kecamatan)) {
+                // Level Kecamatan - statistik per desa - LOGIKA DIPERBAIKI
+                $sql = "SELECT 
+                            d.kode_wilayah,
+                            d.nama,
+                            COUNT(l.kode_lokasi) as jumlah_lokasi,
+                            SUM(CASE WHEN l.ketersediaan_sinyal = 'Yes' THEN 1 ELSE 0 END) as lokasi_ada_sinyal,
+                            SUM(CASE WHEN l.ketersediaan_sinyal = 'No' THEN 1 ELSE 0 END) as lokasi_blankspot,
+                            -- Logika baru: desa tanpa data lokasi = dianggap ada sinyal
+                            CASE 
+                                WHEN COUNT(l.kode_lokasi) = 0 THEN 'Ada Sinyal' -- Tidak ada data = Ada Sinyal
+                                WHEN SUM(CASE WHEN l.ketersediaan_sinyal = 'Yes' THEN 1 ELSE 0 END) > 0 THEN 'Ada Sinyal'
+                                ELSE 'Blankspot'
+                            END as status_desa,
+                            -- Untuk kompatibilitas dengan kode existing
+                            CASE 
+                                WHEN COUNT(l.kode_lokasi) = 0 THEN 1 -- Tidak ada data = Ada Sinyal
+                                WHEN SUM(CASE WHEN l.ketersediaan_sinyal = 'Yes' THEN 1 ELSE 0 END) > 0 THEN 1
+                                ELSE 0
+                            END as desa_ada_sinyal,
+                            CASE 
+                                WHEN COUNT(l.kode_lokasi) = 0 THEN 0 -- Tidak ada data = BUKAN Blankspot
+                                WHEN SUM(CASE WHEN l.ketersediaan_sinyal = 'Yes' THEN 1 ELSE 0 END) = 0 THEN 1
+                                ELSE 0
+                            END as desa_blankspot
+                        FROM wilayah d
+                        LEFT JOIN lokasi l ON d.kode_wilayah = l.kode_wilayah AND l.is_deleted = 0
+                        WHERE d.level = 'desa' AND d.parent_kode = ?
+                        GROUP BY d.kode_wilayah, d.nama
+                        ORDER BY d.nama";
+                
+                $stmt = $conn->prepare($sql);
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . $conn->error);
+                }
+                $stmt->bind_param('s', $kecamatan);
+                
+            } elseif (!empty($kota)) {
+                // Level Kota - statistik per kecamatan - LOGIKA DIPERBAIKI
+                $sql = "SELECT 
+                            kc.kode_wilayah,
+                            kc.nama,
+                            COUNT(DISTINCT d.kode_wilayah) as total_desa,
+                            -- Hitung desa yang: ada sinyal ATAU tidak ada data lokasi
+                            COUNT(DISTINCT CASE 
+                                WHEN NOT EXISTS (
+                                    SELECT 1 FROM lokasi l 
+                                    WHERE l.kode_wilayah = d.kode_wilayah 
+                                    AND l.is_deleted = 0
+                                ) THEN d.kode_wilayah -- Tidak ada data = Ada Sinyal
+                                WHEN EXISTS (
+                                    SELECT 1 FROM lokasi l 
+                                    WHERE l.kode_wilayah = d.kode_wilayah 
+                                    AND l.ketersediaan_sinyal = 'Yes'
+                                    AND l.is_deleted = 0
+                                ) THEN d.kode_wilayah -- Ada minimal 1 sinyal
+                            END) as desa_ada_sinyal,
+                            -- Hitung desa yang: punya lokasi tapi SEMUA tidak ada sinyal
+                            COUNT(DISTINCT CASE 
+                                WHEN EXISTS (
+                                    SELECT 1 FROM lokasi l 
+                                    WHERE l.kode_wilayah = d.kode_wilayah 
+                                    AND l.is_deleted = 0
+                                ) AND NOT EXISTS (
+                                    SELECT 1 FROM lokasi l2 
+                                    WHERE l2.kode_wilayah = d.kode_wilayah 
+                                    AND l2.ketersediaan_sinyal = 'Yes'
+                                    AND l2.is_deleted = 0
+                                ) THEN d.kode_wilayah
+                            END) as desa_blankspot
+                        FROM wilayah kc
+                        LEFT JOIN wilayah d ON kc.kode_wilayah = d.parent_kode AND d.level = 'desa'
+                        WHERE kc.level = 'kecamatan' AND kc.parent_kode = ?
+                        GROUP BY kc.kode_wilayah, kc.nama
+                        ORDER BY kc.nama";
+                
+                $stmt = $conn->prepare($sql);
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . $conn->error);
+                }
+                $stmt->bind_param('s', $kota);
+                
+            } elseif (!empty($provinsi)) {
+                // Level Provinsi - statistik per kota - LOGIKA DIPERBAIKI
+                $sql = "SELECT 
+                            k.kode_wilayah,
+                            k.nama,
+                            COUNT(DISTINCT kc.kode_wilayah) as jumlah_kecamatan,
+                            COUNT(DISTINCT d.kode_wilayah) as total_desa,
+                            -- Hitung desa yang: ada sinyal ATAU tidak ada data lokasi
+                            COUNT(DISTINCT CASE 
+                                WHEN NOT EXISTS (
+                                    SELECT 1 FROM lokasi l 
+                                    WHERE l.kode_wilayah = d.kode_wilayah 
+                                    AND l.is_deleted = 0
+                                ) THEN d.kode_wilayah -- Tidak ada data = Ada Sinyal
+                                WHEN EXISTS (
+                                    SELECT 1 FROM lokasi l 
+                                    WHERE l.kode_wilayah = d.kode_wilayah 
+                                    AND l.ketersediaan_sinyal = 'Yes'
+                                    AND l.is_deleted = 0
+                                ) THEN d.kode_wilayah -- Ada minimal 1 sinyal
+                            END) as desa_ada_sinyal,
+                            -- Hitung desa yang: punya lokasi tapi SEMUA tidak ada sinyal
+                            COUNT(DISTINCT CASE 
+                                WHEN EXISTS (
+                                    SELECT 1 FROM lokasi l 
+                                    WHERE l.kode_wilayah = d.kode_wilayah 
+                                    AND l.is_deleted = 0
+                                ) AND NOT EXISTS (
+                                    SELECT 1 FROM lokasi l2 
+                                    WHERE l2.kode_wilayah = d.kode_wilayah 
+                                    AND l2.ketersediaan_sinyal = 'Yes'
+                                    AND l2.is_deleted = 0
+                                ) THEN d.kode_wilayah
+                            END) as desa_blankspot
+                        FROM wilayah k
+                        LEFT JOIN wilayah kc ON k.kode_wilayah = kc.parent_kode AND kc.level = 'kecamatan'
+                        LEFT JOIN wilayah d ON kc.kode_wilayah = d.parent_kode AND d.level = 'desa'
+                        WHERE k.level = 'kota' AND k.parent_kode = ?
+                        GROUP BY k.kode_wilayah, k.nama
+                        ORDER BY k.nama";
+                
+                $stmt = $conn->prepare($sql);
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . $conn->error);
+                }
+                $stmt->bind_param('s', $provinsi);
+                
             } else {
-                // Untuk level statistik, konversi ke integer
-                $r['jumlah'] = intval($r['jumlah'] ?? 0);
-                $r['ada'] = intval($r['ada'] ?? 0);
-                $r['tidak'] = intval($r['tidak'] ?? 0);
+                // Level Nasional - statistik per provinsi - LOGIKA DIPERBAIKI
+                $sql = "SELECT 
+                            p.kode_wilayah,
+                            p.nama,
+                            COUNT(DISTINCT k.kode_wilayah) as jumlah_kota,
+                            COUNT(DISTINCT kc.kode_wilayah) as jumlah_kecamatan,
+                            COUNT(DISTINCT d.kode_wilayah) as total_desa,
+                            -- Hitung desa yang: ada sinyal ATAU tidak ada data lokasi
+                            COUNT(DISTINCT CASE 
+                                WHEN NOT EXISTS (
+                                    SELECT 1 FROM lokasi l 
+                                    WHERE l.kode_wilayah = d.kode_wilayah 
+                                    AND l.is_deleted = 0
+                                ) THEN d.kode_wilayah -- Tidak ada data = Ada Sinyal
+                                WHEN EXISTS (
+                                    SELECT 1 FROM lokasi l 
+                                    WHERE l.kode_wilayah = d.kode_wilayah 
+                                    AND l.ketersediaan_sinyal = 'Yes'
+                                    AND l.is_deleted = 0
+                                ) THEN d.kode_wilayah -- Ada minimal 1 sinyal
+                            END) as desa_ada_sinyal,
+                            -- Hitung desa yang: punya lokasi tapi SEMUA tidak ada sinyal
+                            COUNT(DISTINCT CASE 
+                                WHEN EXISTS (
+                                    SELECT 1 FROM lokasi l 
+                                    WHERE l.kode_wilayah = d.kode_wilayah 
+                                    AND l.is_deleted = 0
+                                ) AND NOT EXISTS (
+                                    SELECT 1 FROM lokasi l2 
+                                    WHERE l2.kode_wilayah = d.kode_wilayah 
+                                    AND l2.ketersediaan_sinyal = 'Yes'
+                                    AND l2.is_deleted = 0
+                                ) THEN d.kode_wilayah
+                            END) as desa_blankspot
+                        FROM wilayah p
+                        LEFT JOIN wilayah k ON p.kode_wilayah = k.parent_kode AND k.level = 'kota'
+                        LEFT JOIN wilayah kc ON k.kode_wilayah = kc.parent_kode AND kc.level = 'kecamatan'
+                        LEFT JOIN wilayah d ON kc.kode_wilayah = d.parent_kode AND d.level = 'desa'
+                        WHERE p.level = 'provinsi'
+                        GROUP BY p.kode_wilayah, p.nama
+                        ORDER BY p.nama";
+                
+                $stmt = $conn->prepare($sql);
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . $conn->error);
+                }
             }
-            $res[] = $r;
+            
+            $stmt->execute();
+            $q = $stmt->get_result();
+            
+            if (!$q) {
+                throw new Exception("Query failed: " . $stmt->error);
+            }
+            
+            while ($r = $q->fetch_assoc()) {
+                // Konversi nilai ke integer
+                $r['jumlah_lokasi'] = intval($r['jumlah_lokasi'] ?? 0);
+                $r['lokasi_ada_sinyal'] = intval($r['lokasi_ada_sinyal'] ?? 0);
+                $r['lokasi_blankspot'] = intval($r['lokasi_blankspot'] ?? 0);
+                $r['total_desa'] = intval($r['total_desa'] ?? 0);
+                $r['desa_ada_sinyal'] = intval($r['desa_ada_sinyal'] ?? 0);
+                $r['desa_blankspot'] = intval($r['desa_blankspot'] ?? 0);
+                $r['jumlah_kota'] = intval($r['jumlah_kota'] ?? 0);
+                $r['jumlah_kecamatan'] = intval($r['jumlah_kecamatan'] ?? 0);
+                
+                $res[] = $r;
+            }
         }
-        
-        // Debug: Log jumlah data akhir
-        error_log("Jumlah data ditemukan: " . count($res));
         
         echo json_encode($res);
-        
-    } catch (Exception $e) {
-        error_log("Error in statistik: " . $e->getMessage());
-        echo json_encode(['error' => $e->getMessage()]);
+        exit;
     }
-    exit;
-}
 
-// ----------------- DEFAULT RESPONSE -----------------
-echo json_encode(['error' => 'Invalid request type']);
+    // ----------------- DEFAULT RESPONSE -----------------
+    echo json_encode(['error' => 'Invalid request type']);
+
+} catch (Exception $e) {
+    error_log("Error in report_data.php: " . $e->getMessage());
+    echo json_encode(['error' => 'Server error: ' . $e->getMessage()]);
+}
 ?>

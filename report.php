@@ -82,7 +82,7 @@ if (!isset($_SESSION['last_report_id']) || $_SESSION['last_report_id'] !== $curr
             <div class="page-header fade-in">
                 <div class="header-title">
                     <h1><i class="fas fa-chart-bar"></i> Laporan Statistik</h1>
-                    <p>Analisis dan statistik data ketersediaan sinyal</p>
+                    <p>Analisis dan statistik data ketersediaan sinyal berdasarkan desa</p>
                 </div>
                 <div class="header-actions">
                     <button onclick="location.reload()" class="btn btn-light">
@@ -122,7 +122,7 @@ if (!isset($_SESSION['last_report_id']) || $_SESSION['last_report_id'] !== $curr
                 <!-- Header Report -->
                 <div class="report-header">
                     <h1 class="report-title">LAPORAN STATISTIK LOKASI</h1>
-                    <p class="report-subtitle">Sistem Pemetaan Ketersediaan Sinyal</p>
+                    <p class="report-subtitle">Sistem Pemetaan Ketersediaan Sinyal Berdasarkan Desa</p>
                 </div>
 
                 <!-- Filter Area -->
@@ -185,16 +185,7 @@ if (!isset($_SESSION['last_report_id']) || $_SESSION['last_report_id'] !== $curr
                 <div class="table-responsive">
                     <table id="dataTable">
                         <thead id="tableHead">
-                            <tr>
-                                <th>No</th>
-                                <th id="headerKode">Kode Wilayah</th>
-                                <th id="headerNama">Nama Wilayah</th>
-                                <th id="headerJumlah">Jumlah Lokasi</th>
-                                <th>Jumlah Sinyal</th>
-                                <th>Ada Sinyal</th>
-                                <th>Tidak Sinyal</th>
-                                <th>Persentase</th>
-                            </tr>
+                            <!-- Header akan diisi JavaScript -->
                         </thead>
                         <tbody id="tableBody">
                             <!-- Data akan diisi Ajax -->
@@ -318,7 +309,7 @@ async function exportToPDF() {
         const pageWidth = pdf.internal.pageSize.getWidth();
         
         const title = "LAPORAN STATISTIK LOKASI";
-        const subtitle = "Sistem Pemetaan Ketersediaan Sinyal";
+        const subtitle = "Sistem Pemetaan Ketersediaan Sinyal Berdasarkan Desa";
         const filterInfo = getFilterTextForPDF();
         const dateInfo = `Dicetak pada: ${new Date().toLocaleDateString('id-ID')} ${new Date().toLocaleTimeString('id-ID')}`;
         
@@ -351,61 +342,63 @@ async function exportToPDF() {
                 6: { cellWidth: 20, halign: 'center' }
             };
             
-        } else if (kc) {
-            // Level Kecamatan → tampil desa
-            headers = ['No', 'Kode Desa', 'Nama Desa', 'Jumlah Lokasi', 'Jumlah Sinyal', 'Ada Sinyal', 'Tidak ada Sinyal', 'Persentase'];
-            columnStyles = {
-                0: { cellWidth: 15, halign: 'center' },
-                1: { cellWidth: 25, halign: 'center' },
-                2: { cellWidth: 40, halign: 'left' },
-                3: { cellWidth: 20, halign: 'center' },
-                4: { cellWidth: 20, halign: 'center' },
-                5: { cellWidth: 18, halign: 'center' },
-                6: { cellWidth: 20, halign: 'center' },
-                7: { cellWidth: 25, halign: 'center' }
-            };
-            
-        } else if (k) {
-            // Level Kota → tampil kecamatan
-            headers = ['No', 'Kode Kecamatan', 'Nama Kecamatan', 'Jumlah Desa', 'Jumlah Sinyal', 'Ada Sinyal', 'Tidak ada Sinyal', 'Persentase'];
-            columnStyles = {
-                0: { cellWidth: 15, halign: 'center' },
-                1: { cellWidth: 25, halign: 'center' },
-                2: { cellWidth: 40, halign: 'left' },
-                3: { cellWidth: 20, halign: 'center' },
-                4: { cellWidth: 20, halign: 'center' },
-                5: { cellWidth: 18, halign: 'center' },
-                6: { cellWidth: 20, halign: 'center' },
-                7: { cellWidth: 25, halign: 'center' }
-            };
-            
-        } else if (p) {
-            // Level Provinsi → tampil kota
-            headers = ['No', 'Kode Kota', 'Nama Kota', 'Jumlah Kecamatan', 'Jumlah Sinyal', 'Ada Sinyal', 'Tidak ada Sinyal', 'Persentase'];
-            columnStyles = {
-                0: { cellWidth: 15, halign: 'center' },
-                1: { cellWidth: 25, halign: 'center' },
-                2: { cellWidth: 40, halign: 'left' },
-                3: { cellWidth: 25, halign: 'center' },
-                4: { cellWidth: 20, halign: 'center' },
-                5: { cellWidth: 18, halign: 'center' },
-                6: { cellWidth: 20, halign: 'center' },
-                7: { cellWidth: 25, halign: 'center' }
-            };
-            
         } else {
-            // Level Nasional → tampil provinsi
-            headers = ['No', 'Kode Provinsi', 'Nama Provinsi', 'Jumlah Kota', 'Jumlah Sinyal', 'Ada Sinyal', 'Tidak ada Sinyal', 'Persentase'];
-            columnStyles = {
-                0: { cellWidth: 15, halign: 'center' },
-                1: { cellWidth: 25, halign: 'center' },
-                2: { cellWidth: 40, halign: 'left' },
-                3: { cellWidth: 20, halign: 'center' },
-                4: { cellWidth: 20, halign: 'center' },
-                5: { cellWidth: 18, halign: 'center' },
-                6: { cellWidth: 20, halign: 'center' },
-                7: { cellWidth: 25, halign: 'center' }
-            };
+            // Untuk semua level di atas desa, gunakan struktur berdasarkan desa
+            if (kc) {
+                // Level Kecamatan → tampil desa
+                headers = ['No', 'Kode Desa', 'Nama Desa', 'Jumlah Lokasi', 'Lokasi Ada Sinyal', 'Lokasi Blankspot', 'Persentase'];
+                columnStyles = {
+                    0: { cellWidth: 15, halign: 'center' },
+                    1: { cellWidth: 25, halign: 'center' },
+                    2: { cellWidth: 40, halign: 'left' },
+                    3: { cellWidth: 20, halign: 'center' },
+                    4: { cellWidth: 20, halign: 'center' },
+                    5: { cellWidth: 20, halign: 'center' },
+                    6: { cellWidth: 25, halign: 'center' }
+                };
+                
+            } else if (k) {
+                // Level Kota → tampil kecamatan
+                headers = ['No', 'Kode Kecamatan', 'Nama Kecamatan', 'Jumlah Desa', 'Desa Ada Sinyal', 'Desa Blankspot', 'Persentase'];
+                columnStyles = {
+                    0: { cellWidth: 15, halign: 'center' },
+                    1: { cellWidth: 25, halign: 'center' },
+                    2: { cellWidth: 40, halign: 'left' },
+                    3: { cellWidth: 20, halign: 'center' },
+                    4: { cellWidth: 20, halign: 'center' },
+                    5: { cellWidth: 20, halign: 'center' },
+                    6: { cellWidth: 25, halign: 'center' }
+                };
+                
+            } else if (p) {
+                // Level Provinsi → tampil kota
+                headers = ['No', 'Kode Kota', 'Nama Kota', 'Jumlah Kecamatan', 'Jumlah Desa', 'Desa Ada Sinyal', 'Desa Blankspot', 'Persentase'];
+                columnStyles = {
+                    0: { cellWidth: 15, halign: 'center' },
+                    1: { cellWidth: 25, halign: 'center' },
+                    2: { cellWidth: 40, halign: 'left' },
+                    3: { cellWidth: 20, halign: 'center' },
+                    4: { cellWidth: 20, halign: 'center' },
+                    5: { cellWidth: 20, halign: 'center' },
+                    6: { cellWidth: 20, halign: 'center' },
+                    7: { cellWidth: 25, halign: 'center' }
+                };
+                
+            } else {
+                // Level Nasional → tampil provinsi
+                headers = ['No', 'Kode Provinsi', 'Nama Provinsi', 'Jumlah Kota', 'Jumlah Kecamatan', 'Jumlah Desa', 'Desa Ada Sinyal', 'Desa Blankspot', 'Persentase'];
+                columnStyles = {
+                    0: { cellWidth: 15, halign: 'center' },
+                    1: { cellWidth: 25, halign: 'center' },
+                    2: { cellWidth: 40, halign: 'left' },
+                    3: { cellWidth: 20, halign: 'center' },
+                    4: { cellWidth: 20, halign: 'center' },
+                    5: { cellWidth: 20, halign: 'center' },
+                    6: { cellWidth: 20, halign: 'center' },
+                    7: { cellWidth: 20, halign: 'center' },
+                    8: { cellWidth: 25, halign: 'center' }
+                };
+            }
         }
         
         // Siapkan data untuk tabel
@@ -428,39 +421,125 @@ async function exportToPDF() {
                 ];
             });
         } else {
-            // Format data untuk level di atas desa (statistik)
+            // Format data untuk level di atas desa (statistik berdasarkan desa)
             tableData = allData.map((row, index) => {
-                const ada = parseInt(row.ada) || 0;
-                const tidak = parseInt(row.tidak) || 0;
-                const jumlah = parseInt(row.jumlah) || 0;
-                const jumlahSinyal = ada + tidak;
-                const persentase = jumlahSinyal > 0 ? ((ada / jumlahSinyal) * 100).toFixed(1) : 0;
+                const totalDesa = parseInt(row.total_desa) || 0;
+                const desaAdaSinyal = parseInt(row.desa_ada_sinyal) || 0;
+                const desaBlankspot = parseInt(row.desa_blankspot) || 0;
+                const persentase = totalDesa > 0 ? ((desaAdaSinyal / totalDesa) * 100).toFixed(1) : 0;
                 
-                return [
-                    (index + 1).toString(),
-                    row.kode_wilayah || row.kode_lokasi || '-',
-                    row.nama || 'Nama Tidak Tersedia',
-                    jumlah.toLocaleString(),
-                    jumlahSinyal.toLocaleString(),
-                    ada.toLocaleString(),
-                    tidak.toLocaleString(),
-                    persentase + '%'
-                ];
+                // Sesuaikan dengan level yang ditampilkan
+                if (kc) {
+                    // Level Kecamatan - tampilkan data desa
+                    const jumlahLokasi = parseInt(row.jumlah_lokasi) || 0;
+                    const lokasiAdaSinyal = parseInt(row.lokasi_ada_sinyal) || 0;
+                    const lokasiBlankspot = parseInt(row.lokasi_blankspot) || 0;
+                    const persentaseLokasi = jumlahLokasi > 0 ? ((lokasiAdaSinyal / jumlahLokasi) * 100).toFixed(1) : 0;
+                    
+                    return [
+                        (index + 1).toString(),
+                        row.kode_wilayah || '-',
+                        row.nama || 'Nama Tidak Tersedia',
+                        jumlahLokasi.toLocaleString(),
+                        lokasiAdaSinyal.toLocaleString(),
+                        lokasiBlankspot.toLocaleString(),
+                        persentaseLokasi + '%'
+                    ];
+                } else if (k) {
+                    // Level Kota - tampilkan data kecamatan
+                    return [
+                        (index + 1).toString(),
+                        row.kode_wilayah || '-',
+                        row.nama || 'Nama Tidak Tersedia',
+                        totalDesa.toLocaleString(),
+                        desaAdaSinyal.toLocaleString(),
+                        desaBlankspot.toLocaleString(),
+                        persentase + '%'
+                    ];
+                } else if (p) {
+                    // Level Provinsi - tampilkan data kota
+                    const jumlahKecamatan = parseInt(row.jumlah_kecamatan) || 0;
+                    return [
+                        (index + 1).toString(),
+                        row.kode_wilayah || '-',
+                        row.nama || 'Nama Tidak Tersedia',
+                        jumlahKecamatan.toLocaleString(),
+                        totalDesa.toLocaleString(),
+                        desaAdaSinyal.toLocaleString(),
+                        desaBlankspot.toLocaleString(),
+                        persentase + '%'
+                    ];
+                } else {
+                    // Level Nasional - tampilkan data provinsi
+                    const jumlahKota = parseInt(row.jumlah_kota) || 0;
+                    const jumlahKecamatan = parseInt(row.jumlah_kecamatan) || 0;
+                    return [
+                        (index + 1).toString(),
+                        row.kode_wilayah || '-',
+                        row.nama || 'Nama Tidak Tersedia',
+                        jumlahKota.toLocaleString(),
+                        jumlahKecamatan.toLocaleString(),
+                        totalDesa.toLocaleString(),
+                        desaAdaSinyal.toLocaleString(),
+                        desaBlankspot.toLocaleString(),
+                        persentase + '%'
+                    ];
+                }
             });
             
             // Tambahkan total row untuk statistik
-            if (!d) {
+            if (!d && allData.length > 0) {
                 const totals = calculateTotals(allData);
-                tableData.push([
-                    'TOTAL',
-                    '',
-                    '',
-                    totals.totalLokasi.toLocaleString(),
-                    totals.totalSinyal.toLocaleString(),
-                    totals.totalAda.toLocaleString(),
-                    totals.totalTidak.toLocaleString(),
-                    totals.totalPersentase + '%'
-                ]);
+                
+                if (kc) {
+                    // Level Kecamatan
+                    const totalPersentase = totals.totalLokasi > 0 ? ((totals.totalLokasiAda / totals.totalLokasi) * 100).toFixed(1) : 0;
+                    tableData.push([
+                        'TOTAL',
+                        '',
+                        '',
+                        totals.totalLokasi.toLocaleString(),
+                        totals.totalLokasiAda.toLocaleString(),
+                        totals.totalLokasiBlankspot.toLocaleString(),
+                        totalPersentase + '%'
+                    ]);
+                } else if (k) {
+                    // Level Kota
+                    tableData.push([
+                        'TOTAL',
+                        '',
+                        '',
+                        totals.totalDesa.toLocaleString(),
+                        totals.totalDesaAda.toLocaleString(),
+                        totals.totalDesaBlankspot.toLocaleString(),
+                        totals.totalPersentase + '%'
+                    ]);
+                } else if (p) {
+                    // Level Provinsi
+                    tableData.push([
+                        'TOTAL',
+                        '',
+                        '',
+                        totals.totalKecamatan.toLocaleString(),
+                        totals.totalDesa.toLocaleString(),
+                        totals.totalDesaAda.toLocaleString(),
+                        totals.totalDesaBlankspot.toLocaleString(),
+                        totals.totalPersentase + '%'
+                    ]);
+                } else {
+                    // Level Nasional
+                    tableData.push([
+                        'TOTAL',
+                        '',
+                        '',
+                        totals.totalKota.toLocaleString(),
+                        totals.totalKecamatan.toLocaleString(),
+                        totals.totalDesa.toLocaleString(),
+                        totals.totalDesaAda.toLocaleString(),
+                        totals.totalDesaBlankspot.toLocaleString(),
+                        totals.totalPersentase + '%'
+                    ]);
+                }
             }
         }
         
@@ -552,29 +631,37 @@ async function exportToPDF() {
 
 // Fungsi untuk menghitung total (hanya untuk statistik)
 function calculateTotals(data) {
+    let totalKota = 0;
+    let totalKecamatan = 0;
+    let totalDesa = 0;
+    let totalDesaAda = 0;
+    let totalDesaBlankspot = 0;
     let totalLokasi = 0;
-    let totalSinyal = 0;
-    let totalAda = 0;
-    let totalTidak = 0;
+    let totalLokasiAda = 0;
+    let totalLokasiBlankspot = 0;
     
     data.forEach(row => {
-        const ada = parseInt(row.ada) || 0;
-        const tidak = parseInt(row.tidak) || 0;
-        const jumlah = parseInt(row.jumlah) || 0;
-        
-        totalLokasi += jumlah;
-        totalSinyal += (ada + tidak);
-        totalAda += ada;
-        totalTidak += tidak;
+        totalKota += parseInt(row.jumlah_kota) || 0;
+        totalKecamatan += parseInt(row.jumlah_kecamatan) || 0;
+        totalDesa += parseInt(row.total_desa) || 0;
+        totalDesaAda += parseInt(row.desa_ada_sinyal) || 0;
+        totalDesaBlankspot += parseInt(row.desa_blankspot) || 0;
+        totalLokasi += parseInt(row.jumlah_lokasi) || 0;
+        totalLokasiAda += parseInt(row.lokasi_ada_sinyal) || 0;
+        totalLokasiBlankspot += parseInt(row.lokasi_blankspot) || 0;
     });
     
-    const totalPersentase = totalSinyal > 0 ? ((totalAda / totalSinyal) * 100).toFixed(1) : 0;
+    const totalPersentase = totalDesa > 0 ? ((totalDesaAda / totalDesa) * 100).toFixed(1) : 0;
     
     return {
+        totalKota,
+        totalKecamatan,
+        totalDesa,
+        totalDesaAda,
+        totalDesaBlankspot,
         totalLokasi,
-        totalSinyal,
-        totalAda,
-        totalTidak,
+        totalLokasiAda,
+        totalLokasiBlankspot,
         totalPersentase
     };
 }
@@ -759,41 +846,63 @@ function updateHeader(){
             </tr>
         `;
     } else {
-        // Untuk level di atas desa, tampilkan struktur statistik biasa
-        let namaText = "Nama Wilayah";
-        let jumlahText = "Jumlah";
-        let kodeText = "Kode Wilayah";
-
-        if(kecamatan.value){ 
-            namaText = "Nama Desa"; 
-            jumlahText = "Jumlah Lokasi"; 
-            kodeText = "Kode Desa";
-        } else if(kota.value){ 
-            namaText = "Nama Kecamatan"; 
-            jumlahText = "Jumlah Desa"; 
-            kodeText = "Kode Kecamatan";
-        } else if(provinsi.value){ 
-            namaText = "Nama Kota"; 
-            jumlahText = "Jumlah Kecamatan"; 
-            kodeText = "Kode Kota";
-        } else { 
-            namaText = "Nama Provinsi"; 
-            jumlahText = "Jumlah Kota"; 
-            kodeText = "Kode Provinsi";
+        // Untuk level di atas desa, tampilkan struktur statistik berdasarkan desa
+        if (kecamatan.value) {
+            // Level Kecamatan - tampilkan data desa
+            tableHead.innerHTML = `
+                <tr>
+                    <th>No</th>
+                    <th>Kode Desa</th>
+                    <th>Nama Desa</th>
+                    <th>Jumlah Lokasi</th>
+                    <th>Lokasi Ada Sinyal</th>
+                    <th>Lokasi Blankspot</th>
+                    <th>Persentase</th>
+                </tr>
+            `;
+        } else if (kota.value) {
+            // Level Kota - tampilkan data kecamatan
+            tableHead.innerHTML = `
+                <tr>
+                    <th>No</th>
+                    <th>Kode Kecamatan</th>
+                    <th>Nama Kecamatan</th>
+                    <th>Jumlah Desa</th>
+                    <th>Desa Ada Sinyal</th>
+                    <th>Desa Blankspot</th>
+                    <th>Persentase</th>
+                </tr>
+            `;
+        } else if (provinsi.value) {
+            // Level Provinsi - tampilkan data kota
+            tableHead.innerHTML = `
+                <tr>
+                    <th>No</th>
+                    <th>Kode Kota</th>
+                    <th>Nama Kota</th>
+                    <th>Jumlah Kecamatan</th>
+                    <th>Jumlah Desa</th>
+                    <th>Desa Ada Sinyal</th>
+                    <th>Desa Blankspot</th>
+                    <th>Persentase</th>
+                </tr>
+            `;
+        } else {
+            // Level Nasional - tampilkan data provinsi
+            tableHead.innerHTML = `
+                <tr>
+                    <th>No</th>
+                    <th>Kode Provinsi</th>
+                    <th>Nama Provinsi</th>
+                    <th>Jumlah Kota</th>
+                    <th>Jumlah Kecamatan</th>
+                    <th>Jumlah Desa</th>
+                    <th>Desa Ada Sinyal</th>
+                    <th>Desa Blankspot</th>
+                    <th>Persentase</th>
+                </tr>
+            `;
         }
-
-        tableHead.innerHTML = `
-            <tr>
-                <th>No</th>
-                <th id="headerKode">${kodeText}</th>
-                <th id="headerNama">${namaText}</th>
-                <th id="headerJumlah">${jumlahText}</th>
-                <th>Jumlah Sinyal</th>
-                <th>Ada Sinyal</th>
-                <th>Tidak Sinyal</th>
-                <th>Persentase</th>
-            </tr>
-        `;
     }
 }
 
@@ -831,54 +940,157 @@ function displayLokasiDetail(pageData, startIndex) {
     tableFooter.innerHTML = '';
 }
 
-// Fungsi untuk menampilkan data statistik reguler (level di atas desa)
-function displayStatistikReguler(pageData, startIndex) {
+// Fungsi untuk menampilkan data statistik berdasarkan desa
+function displayStatistikDesa(pageData, startIndex) {
     tableBody.innerHTML = '';
     
+    let totalKota = 0;
+    let totalKecamatan = 0;
+    let totalDesa = 0;
+    let totalDesaAda = 0;
+    let totalDesaBlankspot = 0;
     let totalLokasi = 0;
-    let totalSinyal = 0;
-    let totalAda = 0;
-    let totalTidak = 0;
+    let totalLokasiAda = 0;
+    let totalLokasiBlankspot = 0;
     
     pageData.forEach((row, i) => {
         const actualIndex = startIndex + i;
-        const ada = parseInt(row.ada) || 0;
-        const tidak = parseInt(row.tidak) || 0;
-        const jumlah = parseInt(row.jumlah) || 0;
-        const jumlahSinyal = ada + tidak;
-        const persentase = jumlahSinyal > 0 ? ((ada / jumlahSinyal) * 100).toFixed(1) : 0;
+        const totalDesaRow = parseInt(row.total_desa) || 0;
+        const desaAdaSinyal = parseInt(row.desa_ada_sinyal) || 0;
+        const desaBlankspot = parseInt(row.desa_blankspot) || 0;
         
-        totalLokasi += jumlah;
-        totalSinyal += jumlahSinyal;
-        totalAda += ada;
-        totalTidak += tidak;
+        // Akumulasi total
+        totalKota += parseInt(row.jumlah_kota) || 0;
+        totalKecamatan += parseInt(row.jumlah_kecamatan) || 0;
+        totalDesa += totalDesaRow;
+        totalDesaAda += desaAdaSinyal;
+        totalDesaBlankspot += desaBlankspot;
+        totalLokasi += parseInt(row.jumlah_lokasi) || 0;
+        totalLokasiAda += parseInt(row.lokasi_ada_sinyal) || 0;
+        totalLokasiBlankspot += parseInt(row.lokasi_blankspot) || 0;
         
-        tableBody.innerHTML += `
-            <tr>
-                <td>${actualIndex + 1}</td>
-                <td class="kode">${row.kode_wilayah || row.kode_lokasi || '-'}</td>
-                <td>${row.nama || 'Nama Tidak Tersedia'}</td>
-                <td>${jumlah.toLocaleString()}</td>
-                <td class="jumlah-sinyal">${jumlahSinyal.toLocaleString()}</td>
-                <td class="ada">${ada.toLocaleString()}</td>
-                <td class="tidak">${tidak.toLocaleString()}</td>
-                <td><strong>${persentase}%</strong></td>
-            </tr>
-        `;
+        // Tampilkan data sesuai level
+        if (kecamatan.value) {
+            // Level Kecamatan - tampilkan data desa
+            const jumlahLokasi = parseInt(row.jumlah_lokasi) || 0;
+            const lokasiAdaSinyal = parseInt(row.lokasi_ada_sinyal) || 0;
+            const lokasiBlankspot = parseInt(row.lokasi_blankspot) || 0;
+            const persentase = jumlahLokasi > 0 ? ((lokasiAdaSinyal / jumlahLokasi) * 100).toFixed(1) : 0;
+            
+            tableBody.innerHTML += `
+                <tr>
+                    <td>${actualIndex + 1}</td>
+                    <td class="kode">${row.kode_wilayah || '-'}</td>
+                    <td>${row.nama || 'Nama Tidak Tersedia'}</td>
+                    <td>${jumlahLokasi.toLocaleString()}</td>
+                    <td class="ada">${lokasiAdaSinyal.toLocaleString()}</td>
+                    <td class="tidak">${lokasiBlankspot.toLocaleString()}</td>
+                    <td><strong>${persentase}%</strong></td>
+                </tr>
+            `;
+        } else if (kota.value) {
+            // Level Kota - tampilkan data kecamatan
+            const persentase = totalDesaRow > 0 ? ((desaAdaSinyal / totalDesaRow) * 100).toFixed(1) : 0;
+            
+            tableBody.innerHTML += `
+                <tr>
+                    <td>${actualIndex + 1}</td>
+                    <td class="kode">${row.kode_wilayah || '-'}</td>
+                    <td>${row.nama || 'Nama Tidak Tersedia'}</td>
+                    <td>${totalDesaRow.toLocaleString()}</td>
+                    <td class="ada">${desaAdaSinyal.toLocaleString()}</td>
+                    <td class="tidak">${desaBlankspot.toLocaleString()}</td>
+                    <td><strong>${persentase}%</strong></td>
+                </tr>
+            `;
+        } else if (provinsi.value) {
+            // Level Provinsi - tampilkan data kota
+            const jumlahKecamatan = parseInt(row.jumlah_kecamatan) || 0;
+            const persentase = totalDesaRow > 0 ? ((desaAdaSinyal / totalDesaRow) * 100).toFixed(1) : 0;
+            
+            tableBody.innerHTML += `
+                <tr>
+                    <td>${actualIndex + 1}</td>
+                    <td class="kode">${row.kode_wilayah || '-'}</td>
+                    <td>${row.nama || 'Nama Tidak Tersedia'}</td>
+                    <td>${jumlahKecamatan.toLocaleString()}</td>
+                    <td>${totalDesaRow.toLocaleString()}</td>
+                    <td class="ada">${desaAdaSinyal.toLocaleString()}</td>
+                    <td class="tidak">${desaBlankspot.toLocaleString()}</td>
+                    <td><strong>${persentase}%</strong></td>
+                </tr>
+            `;
+        } else {
+            // Level Nasional - tampilkan data provinsi
+            const jumlahKota = parseInt(row.jumlah_kota) || 0;
+            const jumlahKecamatan = parseInt(row.jumlah_kecamatan) || 0;
+            const persentase = totalDesaRow > 0 ? ((desaAdaSinyal / totalDesaRow) * 100).toFixed(1) : 0;
+            
+            tableBody.innerHTML += `
+                <tr>
+                    <td>${actualIndex + 1}</td>
+                    <td class="kode">${row.kode_wilayah || '-'}</td>
+                    <td>${row.nama || 'Nama Tidak Tersedia'}</td>
+                    <td>${jumlahKota.toLocaleString()}</td>
+                    <td>${jumlahKecamatan.toLocaleString()}</td>
+                    <td>${totalDesaRow.toLocaleString()}</td>
+                    <td class="ada">${desaAdaSinyal.toLocaleString()}</td>
+                    <td class="tidak">${desaBlankspot.toLocaleString()}</td>
+                    <td><strong>${persentase}%</strong></td>
+                </tr>
+            `;
+        }
     });
     
     // Update footer dengan total
-    const totalPersentase = totalSinyal > 0 ? ((totalAda / totalSinyal) * 100).toFixed(1) : 0;
-    tableFooter.innerHTML = `
-        <tr style="background: var(--gradient-primary); color: white; font-weight: 600;">
-            <td colspan="3">TOTAL</td>
-            <td>${totalLokasi.toLocaleString()}</td>
-            <td>${totalSinyal.toLocaleString()}</td>
-            <td>${totalAda.toLocaleString()}</td>
-            <td>${totalTidak.toLocaleString()}</td>
-            <td>${totalPersentase}%</td>
-        </tr>
-    `;
+    if (kecamatan.value) {
+        const totalPersentase = totalLokasi > 0 ? ((totalLokasiAda / totalLokasi) * 100).toFixed(1) : 0;
+        tableFooter.innerHTML = `
+            <tr style="background: var(--gradient-primary); color: white; font-weight: 600;">
+                <td colspan="3">TOTAL</td>
+                <td>${totalLokasi.toLocaleString()}</td>
+                <td>${totalLokasiAda.toLocaleString()}</td>
+                <td>${totalLokasiBlankspot.toLocaleString()}</td>
+                <td>${totalPersentase}%</td>
+            </tr>
+        `;
+    } else if (kota.value) {
+        const totalPersentase = totalDesa > 0 ? ((totalDesaAda / totalDesa) * 100).toFixed(1) : 0;
+        tableFooter.innerHTML = `
+            <tr style="background: var(--gradient-primary); color: white; font-weight: 600;">
+                <td colspan="3">TOTAL</td>
+                <td>${totalDesa.toLocaleString()}</td>
+                <td>${totalDesaAda.toLocaleString()}</td>
+                <td>${totalDesaBlankspot.toLocaleString()}</td>
+                <td>${totalPersentase}%</td>
+            </tr>
+        `;
+    } else if (provinsi.value) {
+        const totalPersentase = totalDesa > 0 ? ((totalDesaAda / totalDesa) * 100).toFixed(1) : 0;
+        tableFooter.innerHTML = `
+            <tr style="background: var(--gradient-primary); color: white; font-weight: 600;">
+                <td colspan="3">TOTAL</td>
+                <td>${totalKecamatan.toLocaleString()}</td>
+                <td>${totalDesa.toLocaleString()}</td>
+                <td>${totalDesaAda.toLocaleString()}</td>
+                <td>${totalDesaBlankspot.toLocaleString()}</td>
+                <td>${totalPersentase}%</td>
+            </tr>
+        `;
+    } else {
+        const totalPersentase = totalDesa > 0 ? ((totalDesaAda / totalDesa) * 100).toFixed(1) : 0;
+        tableFooter.innerHTML = `
+            <tr style="background: var(--gradient-primary); color: white; font-weight: 600;">
+                <td colspan="3">TOTAL</td>
+                <td>${totalKota.toLocaleString()}</td>
+                <td>${totalKecamatan.toLocaleString()}</td>
+                <td>${totalDesa.toLocaleString()}</td>
+                <td>${totalDesaAda.toLocaleString()}</td>
+                <td>${totalDesaBlankspot.toLocaleString()}</td>
+                <td>${totalPersentase}%</td>
+            </tr>
+        `;
+    }
 }
 
 // Fungsi untuk menampilkan data dengan pagination
@@ -890,7 +1102,8 @@ function displayPage(page, data) {
     tableBody.innerHTML = '';
     
     if (pageData.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 30px; color: #64748b;">Tidak ada data yang sesuai dengan filter</td></tr>';
+        const colspan = desa.value ? 7 : (kecamatan.value ? 7 : (kota.value ? 7 : (provinsi.value ? 8 : 9)));
+        tableBody.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center; padding: 30px; color: #64748b;">Tidak ada data yang sesuai dengan filter</td></tr>`;
         rangeInfo.textContent = 'Tidak ada data untuk ditampilkan';
         paginationContainer.innerHTML = '';
         return;
@@ -902,8 +1115,8 @@ function displayPage(page, data) {
         // TAMPILAN DETAIL LOKASI untuk level desa
         displayLokasiDetail(pageData, startIndex);
     } else {
-        // TAMPILAN STATISTIK biasa untuk level di atas desa
-        displayStatistikReguler(pageData, startIndex);
+        // TAMPILAN STATISTIK berdasarkan desa untuk level di atas desa
+        displayStatistikDesa(pageData, startIndex);
     }
     
     // Update info range
@@ -980,12 +1193,13 @@ function loadTable(){
         currentPage = 1;
         
         if(data.error){
-            tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:red;">Error: ${data.error}</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; color:red;">Error: ${data.error}</td></tr>`;
             return;
         }
         
         if(!data || data.length === 0){
-            tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 30px; color: #64748b;">Tidak ada data yang sesuai dengan filter</td></tr>';
+            const colspan = d ? 7 : (kc ? 7 : (k ? 7 : (p ? 8 : 9)));
+            tableBody.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center; padding: 30px; color: #64748b;">Tidak ada data yang sesuai dengan filter</td></tr>`;
             rangeInfo.textContent = 'Tidak ada data untuk ditampilkan';
             paginationContainer.innerHTML = '';
         } else {
@@ -999,7 +1213,7 @@ function loadTable(){
     })
     .catch(err => {
         console.error('Fetch error:', err);
-        tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:red;">Error loading data: ' + err.message + '</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:red;">Error loading data: ' + err.message + '</td></tr>';
         showError('Gagal memuat data statistik: ' + err.message);
     })
     .finally(() => {
@@ -1127,6 +1341,14 @@ style.textContent = `
         padding: 4px 8px;
         border-radius: 4px;
         text-align: center;
+    }
+    .ada {
+        color: #10b981;
+        font-weight: 600;
+    }
+    .tidak {
+        color: #ef4444;
+        font-weight: 600;
     }
     @media (max-width: 768px) {
         .kecepatan {
