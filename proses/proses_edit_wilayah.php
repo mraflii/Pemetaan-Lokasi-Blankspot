@@ -2,131 +2,114 @@
 include "../config/db.php";
 session_start();
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $wilayah   = $_POST['wilayah'] ?? [];
-    $kodeBaru  = $_POST['kode'] ?? [];
-    $provinsi  = $_POST['provinsi'] ?? '';
+header('Content-Type: application/json');
 
-    if (empty($wilayah) || empty($provinsi)) {
-        die("<script>alert('❌ Data tidak lengkap!'); window.history.back();</script>");
-    }
+// Log untuk debug
+error_log("=== DEBUG PROCESS EDIT WILAYAH ===");
+error_log("POST Data: " . print_r($_POST, true));
 
-    $updated = 0;
-    $alreadyExists = [];
-    $dibuat_oleh = $_SESSION['username'] ?? 'System';
-
-    foreach ($wilayah as $kodeLama => $nama) {
-        $nama = trim($nama);
-        $kodeBaruVal = trim($kodeBaru[$kodeLama] ?? $kodeLama);
-
-        if ($nama !== '' && $kodeBaruVal !== '') {
-            // Ambil data lama
-            $row = $conn->query("SELECT * FROM wilayah WHERE kode_wilayah='$kodeLama'")->fetch_assoc();
-            if (!$row) continue;
-
-            $level = $row['level'];
-            $parent = $row['parent_kode'];
-            $namaLama = $row['nama'];
-            $kodeLamaAsli = $row['kode_wilayah'];
-
-            // CEK: Hanya proses jika ada perubahan
-            if ($namaLama === $nama && $kodeLamaAsli === $kodeBaruVal) {
-                continue; // Skip jika tidak ada perubahan
-            }
-
-            $dataSebelum = [
-                'kode_wilayah' => $kodeLamaAsli,
-                'nama' => $namaLama,
-                'level' => $level,
-                'parent_kode' => $parent
-            ];
-
-            // Cek duplikat
-            $cekKode = $conn->query("SELECT 1 FROM wilayah WHERE kode_wilayah='$kodeBaruVal' AND kode_wilayah != '$kodeLama'");
-            if ($cekKode && $cekKode->num_rows > 0) {
-                $alreadyExists[] = "Kode $kodeBaruVal";
-                continue;
-            }
-
-            $cekNama = $conn->query("SELECT 1 FROM wilayah WHERE nama='$nama' AND level='$level' AND parent_kode ".($parent ? "= '$parent'" : "IS NULL")." AND kode_wilayah != '$kodeLama'");
-            if ($cekNama && $cekNama->num_rows > 0) {
-                $alreadyExists[] = "Nama '$nama' di level $level sudah ada";
-                continue;
-            }
-
-            // Update data
-            $stmt = $conn->prepare("UPDATE wilayah SET kode_wilayah=?, nama=? WHERE kode_wilayah=?");
-            $stmt->bind_param("sss", $kodeBaruVal, $nama, $kodeLama);
-
-            if ($stmt->execute()) {
-                $updated++;
-                
-                // === CATAT KE RIWAYAT HANYA JIKA ADA PERUBAHAN ===
-                $jenis_aktivitas = 'EDIT_WILAYAH';
-                $deskripsi = "Mengedit wilayah $level";
-                
-                $dataSesudah = [
-                    'kode_wilayah' => $kodeBaruVal,
-                    'nama' => $nama,
-                    'level' => $level,
-                    'parent_kode' => $parent
-                ];
-                
-                // Detail perubahan
-                if ($kodeLamaAsli !== $kodeBaruVal && $namaLama !== $nama) {
-                    $deskripsi = "Mengedit wilayah $level: $namaLama → $nama (Kode: $kodeLamaAsli → $kodeBaruVal)";
-                } elseif ($kodeLamaAsli !== $kodeBaruVal) {
-                    $deskripsi = "Mengedit kode wilayah $level $namaLama: $kodeLamaAsli → $kodeBaruVal";
-                } elseif ($namaLama !== $nama) {
-                    $deskripsi = "Mengedit nama wilayah $level: $namaLama → $nama";
-                }
-                
-                // Siapkan data JSON sebelum bind_param
-                $dataSebelumJson = json_encode($dataSebelum);
-                $dataSesudahJson = json_encode($dataSesudah);
-                
-                $stmt_riwayat = $conn->prepare("INSERT INTO riwayat_aktivitas 
-                    (jenis_aktivitas, kode_data, nama_data, deskripsi, data_sebelum, data_sesudah, dibuat_oleh) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?)");
-                
-                // Gunakan variabel langsung, bukan reference
-                $stmt_riwayat->bind_param("sssssss", 
-                    $jenis_aktivitas, 
-                    $kodeBaruVal,
-                    $nama, 
-                    $deskripsi, 
-                    $dataSebelumJson, 
-                    $dataSesudahJson, 
-                    $dibuat_oleh
-                );
-                
-                $stmt_riwayat->execute();
-                $stmt_riwayat->close();
-            }
-            $stmt->close();
-        }
-    }
-
-    $conn->close();
-
-    // Buat pesan alert
-    $alertMsg = "✅ $updated data wilayah berhasil diupdate";
-    if (!empty($alreadyExists)) {
-        $alertMsg .= "\\n⚠️ Data tidak dapat di update karena sudah ada:\\n" . implode("\\n", $alreadyExists);
-    }
-
-    if ($updated > 0) {
-        $alertMsg .= "\\n📝 Perubahan telah tercatat dalam riwayat";
-    } else {
-        $alertMsg .= "\\nℹ️ Tidak ada perubahan yang dilakukan";
-    }
-
-    echo "<script>
-        alert('$alertMsg');
-        window.location.href='../hasil_pemetaan.php';
-    </script>";
-    exit;
-} else {
-    die("Akses tidak valid.");
+// Fungsi untuk mencatat riwayat aktivitas
+function catatRiwayatWilayah($conn, $jenis_aktivitas, $kode_data, $nama_data, $deskripsi, $data_sebelum = null, $data_sesudah = null) {
+    $username = $_SESSION['username'] ?? 'system';
+    $created_at = date('Y-m-d H:i:s');
+    
+    // Escape data untuk keamanan
+    $jenis_aktivitas = $conn->real_escape_string($jenis_aktivitas);
+    $kode_data = $conn->real_escape_string($kode_data);
+    $nama_data = $conn->real_escape_string($nama_data);
+    $deskripsi = $conn->real_escape_string($deskripsi);
+    $data_sebelum = $data_sebelum ? "'" . $conn->real_escape_string(json_encode($data_sebelum, JSON_UNESCAPED_UNICODE)) . "'" : 'NULL';
+    $data_sesudah = $data_sesudah ? "'" . $conn->real_escape_string(json_encode($data_sesudah, JSON_UNESCAPED_UNICODE)) . "'" : 'NULL';
+    $dibuat_oleh = $conn->real_escape_string($username);
+    
+    $query = "INSERT INTO riwayat_aktivitas 
+              (jenis_aktivitas, kode_data, nama_data, deskripsi, data_sebelum, data_sesudah, dibuat_oleh, created_at) 
+              VALUES ('$jenis_aktivitas', '$kode_data', '$nama_data', '$deskripsi', $data_sebelum, $data_sesudah, '$dibuat_oleh', '$created_at')";
+    
+    error_log("Query Riwayat: $query");
+    return $conn->query($query);
 }
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $kode_lama = $_POST['kode_lama'] ?? '';
+    $kode_baru = $_POST['kode_baru'] ?? '';
+    $nama = trim($_POST['nama'] ?? '');
+    $provinsi = $_POST['provinsi'] ?? '';
+
+    error_log("Kode Lama: $kode_lama");
+    error_log("Kode Baru: $kode_baru"); 
+    error_log("Nama: $nama");
+    error_log("Provinsi: $provinsi");
+
+    // Validasi sederhana
+    if (empty($kode_lama) || empty($kode_baru) || empty($nama)) {
+        error_log("VALIDASI GAGAL: Data tidak lengkap");
+        echo json_encode(['success' => false, 'message' => 'Data tidak lengkap!']);
+        exit;
+    }
+
+    // Cek data lama
+    $check_query = $conn->query("SELECT * FROM wilayah WHERE kode_wilayah = '$kode_lama'");
+    if ($check_query->num_rows === 0) {
+        error_log("DATA TIDAK DITEMUKAN: $kode_lama");
+        echo json_encode(['success' => false, 'message' => 'Data wilayah tidak ditemukan!']);
+        exit;
+    }
+
+    $data_lama = $check_query->fetch_assoc();
+    error_log("Data Lama: " . print_r($data_lama, true));
+
+    // Update data
+    $update_query = "UPDATE wilayah SET kode_wilayah = '$kode_baru', nama = '$nama' WHERE kode_wilayah = '$kode_lama'";
+    error_log("Query Update: $update_query");
+
+    if ($conn->query($update_query)) {
+        error_log("UPDATE BERHASIL");
+        
+        // Data sesudah edit
+        $data_sesudah = [
+            'kode_wilayah' => $kode_baru,
+            'nama' => $nama,
+            'level' => $data_lama['level'],
+            'parent_kode' => $data_lama['parent_kode']
+        ];
+        
+        // Catat riwayat edit wilayah
+        $deskripsi = "Edit data wilayah " . $data_lama['level'] . ": " . $data_lama['nama'] . " → " . $nama;
+        
+        $riwayat_success = catatRiwayatWilayah(
+            $conn, 
+            'EDIT_WILAYAH', 
+            $kode_lama, 
+            $nama, 
+            $deskripsi, 
+            $data_lama, 
+            $data_sesudah
+        );
+        
+        if ($riwayat_success) {
+            error_log("RIWAYAT BERHASIL DICATAT");
+        } else {
+            error_log("GAGAL MENCATAT RIWAYAT: " . $conn->error);
+        }
+        
+        echo json_encode([
+            'success' => true, 
+            'message' => 'Data wilayah berhasil diperbarui!'
+        ]);
+    } else {
+        $error = $conn->error;
+        error_log("UPDATE GAGAL: $error");
+        echo json_encode([
+            'success' => false, 
+            'message' => 'Gagal memperbarui data: ' . $error
+        ]);
+    }
+
+} else {
+    error_log("METHOD TIDAK DIIZINKAN");
+    echo json_encode(['success' => false, 'message' => 'Method tidak diizinkan!']);
+}
+
+$conn->close();
 ?>

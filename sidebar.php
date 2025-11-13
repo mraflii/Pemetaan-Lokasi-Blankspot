@@ -47,7 +47,7 @@ if (session_status() == PHP_SESSION_NONE) {
                 <i class="fas fa-history"></i>
                 <span>Riwayat Aktivitas</span>
             </a>
-            <?php if (isset($_SESSION['peran']) && $_SESSION['peran'] === 'Super Admin'): ?>
+            <?php if (isset($_SESSION['peran']) && ($_SESSION['peran'] === 'Super Admin' || $_SESSION['peran'] === 'Admin')): ?>
             <a href="manage_users.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) == 'manage_users.php' ? 'active' : '' ?>">
                 <i class="fas fa-users-cog"></i>
                 <span>Kelola User</span>

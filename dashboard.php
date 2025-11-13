@@ -77,6 +77,14 @@ foreach ($desaData as $desa) {
 // Hitung persentase
 $persentaseDesaAdaSinyal = $totalDesa > 0 ? round(($desaAdaSinyal / $totalDesa) * 100, 1) : 0;
 
+// PERBAIKAN: Hitung total kabupaten/kota - gunakan level 'kota'
+$kabupatenQuery = $conn->query("SELECT COUNT(*) as total FROM wilayah WHERE level = 'kota'");
+$totalKabupaten = $kabupatenQuery ? $kabupatenQuery->fetch_assoc()['total'] : 0;
+
+// PERBAIKAN: Hitung total kecamatan - gunakan level 'kecamatan'
+$kecamatanQuery = $conn->query("SELECT COUNT(*) as total FROM wilayah WHERE level = 'kecamatan'");
+$totalKecamatan = $kecamatanQuery ? $kecamatanQuery->fetch_assoc()['total'] : 0;
+
 // Data lokasi untuk statistik lainnya (untuk info tambahan)
 $adaRes = $conn->query("SELECT COUNT(*) as jml FROM lokasi WHERE ketersediaan_sinyal='Yes' AND is_deleted=0");
 $adaSinyal = $adaRes ? $adaRes->fetch_assoc()['jml'] : 0;
@@ -157,6 +165,13 @@ if ($dataLokasi) {
         ];
     }
 }
+
+// DEBUG: Cek struktur data wilayah
+$debugLevels = $conn->query("SELECT level, COUNT(*) as jumlah FROM wilayah GROUP BY level");
+$debugInfo = "";
+while ($debug = $debugLevels->fetch_assoc()) {
+    $debugInfo .= $debug['level'] . ": " . $debug['jumlah'] . " | ";
+}
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -182,6 +197,8 @@ if ($dataLokasi) {
     --gradient-success: linear-gradient(135deg, #4cc9f0 0%, #4895ef 100%);
     --gradient-warning: linear-gradient(135deg, #f72585 0%, #b5179e 100%);
     --gradient-danger: linear-gradient(135deg, #e63946 0%, #a4161a 100%);
+    --gradient-kabupaten: linear-gradient(135deg, #ff9a00 0%, #ff6a00 100%);
+    --gradient-kecamatan: linear-gradient(135deg, #00b09b 0%, #96c93d 100%);
 }
 
 * {
@@ -354,6 +371,8 @@ body {
 .stat-card.tidak { border-left-color: var(--danger); }
 .stat-card.baru { border-left-color: var(--info); }
 .stat-card.update { border-left-color: #ff6b00; }
+.stat-card.kabupaten { border-left-color: #ff6a00; }
+.stat-card.kecamatan { border-left-color: #00b09b; }
 
 .stat-header {
     display: flex;
@@ -377,6 +396,8 @@ body {
 .stat-card.tidak .stat-icon { background: rgba(230, 57, 70, 0.1); color: var(--danger); }
 .stat-card.baru .stat-icon { background: rgba(114, 9, 183, 0.1); color: var(--info); }
 .stat-card.update .stat-icon { background: rgba(255, 107, 0, 0.1); color: #ff6b00; }
+.stat-card.kabupaten .stat-icon { background: rgba(255, 106, 0, 0.1); color: #ff6a00; }
+.stat-card.kecamatan .stat-icon { background: rgba(0, 176, 155, 0.1); color: #00b09b; }
 
 .stat-badge {
     background: #e9ecef;
@@ -398,6 +419,8 @@ body {
 .stat-card.tidak .stat-value { color: var(--danger); }
 .stat-card.baru .stat-value { color: var(--info); }
 .stat-card.update .stat-value { color: #ff6b00; }
+.stat-card.kabupaten .stat-value { color: #ff6a00; }
+.stat-card.kecamatan .stat-value { color: #00b09b; }
 
 .stat-label {
     color: #6c757d;
@@ -957,6 +980,9 @@ body {
 </head>
 <body>
 
+<!-- DEBUG INFO (akan muncul di source code) -->
+<!-- DEBUG Wilayah Levels: <?= $debugInfo ?> -->
+
 <div class="app-container">
     <!-- Sidebar -->
     <?php include 'sidebar.php'; ?>
@@ -979,7 +1005,7 @@ body {
             </div>
         </div>
 
-        <!-- Quick Stats -->
+        <!-- Quick Stats - HANYA 2 CARD (persentase dan total desa) -->
         <div class="quick-stats fade-in">
             <div class="quick-stat-card">
                 <div class="quick-stat-number"><?= $persentaseDesaAdaSinyal ?>%</div>
@@ -987,12 +1013,53 @@ body {
             </div>
             <div class="quick-stat-card">
                 <div class="quick-stat-number"><?= $totalDesa ?></div>
-                <div class="quick-stat-label">Total Desa Terdaftar</div>
+                <div class="quick-stat-label">Total Desa </div>
             </div>
         </div>
 
-        <!-- Stats Grid -->
+        <!-- Stats Grid - DENGAN CARD KABUPATEN & KECAMATAN -->
         <div class="stats-grid fade-in">
+            <div class="stat-card kabupaten" onclick="showNotification('Total Kabupaten/Kota: <?= $totalKabupaten ?> wilayah', 'info')">
+                <div class="stat-header">
+                    <div class="stat-icon">
+                        <i class="fas fa-city"></i>
+                    </div>
+                    <div class="stat-badge">KABUPATEN/KOTA</div>
+                </div>
+                <div class="stat-value"><?= number_format($totalKabupaten) ?></div>
+                <div class="stat-label">Total Kabupaten/Kota</div>
+                <div class="stat-details">
+                    <div class="stat-detail">
+                        <i class="fas fa-map-marked-alt"></i>
+                        <span>Wilayah Administrasi</span>
+                    </div>
+                    <div class="stat-detail">
+                        <i class="fas fa-layer-group"></i>
+                        <span>Level Kabupaten/Kota</span>
+                    </div>
+                </div>
+            </div>
+            <div class="stat-card kecamatan" onclick="showNotification('Total Kecamatan: <?= $totalKecamatan ?> wilayah', 'info')">
+                <div class="stat-header">
+                    <div class="stat-icon">
+                        <i class="fas fa-map"></i>
+                    </div>
+                    <div class="stat-badge">KECAMATAN</div>
+                </div>
+                <div class="stat-value"><?= number_format($totalKecamatan) ?></div>
+                <div class="stat-label">Total Kecamatan</div>
+                <div class="stat-details">
+                    <div class="stat-detail">
+                        <i class="fas fa-map-marked-alt"></i>
+                        <span>Wilayah Administrasi</span>
+                    </div>
+                    <div class="stat-detail">
+                        <i class="fas fa-layer-group"></i>
+                        <span>Level Kecamatan</span>
+                    </div>
+                </div>
+            </div>
+            
             <div class="stat-card total" onclick="zoomToAll()">
                 <div class="stat-header">
                     <div class="stat-icon">
@@ -1001,7 +1068,7 @@ body {
                     <div class="stat-badge">DESA</div>
                 </div>
                 <div class="stat-value"><?= number_format($totalDesa) ?></div>
-                <div class="stat-label">Total Desa Terdaftar</div>
+                <div class="stat-label">Total Desa </div>
                 <div class="stat-details">
                     <div class="stat-detail">
                         <i class="fas fa-check-circle" style="color: var(--success);"></i>
@@ -1013,6 +1080,7 @@ body {
                     </div>
                 </div>
             </div>
+           
 
             <div class="stat-card ada" onclick="zoomToGroup('Yes')">
                 <div class="stat-header">

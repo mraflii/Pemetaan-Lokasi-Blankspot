@@ -74,7 +74,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // Fungsi untuk mencatat ke riwayat aktivitas
+    // ========== FUNGSI UNTUK MENCATAT RIWAYAT ==========
+
+    // Fungsi untuk mencatat ke riwayat aktivitas WILAYAH
     function catatRiwayatWilayah($conn, $kode, $nama, $level, $parent = null, $jenis_aktivitas = 'TAMBAH_WILAYAH') {
         $dibuat_oleh = $_SESSION['username'] ?? 'System';
         $deskripsi = "Menambahkan wilayah $level: $nama";
@@ -82,8 +84,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'kode_wilayah' => $kode,
             'nama' => $nama,
             'level' => $level,
-            'parent_kode' => $parent
-        ]);
+            'parent_kode' => $parent,
+            'created_at' => date('Y-m-d H:i:s')
+        ], JSON_UNESCAPED_UNICODE);
         
         $stmt = $conn->prepare("INSERT INTO riwayat_aktivitas 
             (jenis_aktivitas, kode_data, nama_data, deskripsi, data_sebelum, data_sesudah, dibuat_oleh) 
@@ -91,12 +94,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->bind_param("ssssss", $jenis_aktivitas, $kode, $nama, $deskripsi, $data_sesudah, $dibuat_oleh);
         $result = $stmt->execute();
         if (!$result) {
-            error_log("Error catat riwayat: " . $stmt->error);
+            error_log("Error catat riwayat wilayah: " . $stmt->error);
         }
         $stmt->close();
         return $result;
     }
 
+    // Fungsi untuk mencatat ke riwayat aktivitas LOKASI
     function catatRiwayatLokasi($conn, $kode_lokasi, $nama_tempat, $kode_wilayah, $jenis_aktivitas = 'TAMBAH_LOKASI') {
         $dibuat_oleh = $_SESSION['username'] ?? 'System';
         $deskripsi = "Menambahkan lokasi: $nama_tempat";
@@ -105,7 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'nama_tempat' => $nama_tempat,
             'kode_wilayah' => $kode_wilayah,
             'created_at' => date('Y-m-d H:i:s')
-        ]);
+        ], JSON_UNESCAPED_UNICODE);
         
         $stmt = $conn->prepare("INSERT INTO riwayat_aktivitas 
             (jenis_aktivitas, kode_data, nama_data, deskripsi, data_sebelum, data_sesudah, dibuat_oleh) 
@@ -113,13 +117,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->bind_param("ssssss", $jenis_aktivitas, $kode_lokasi, $nama_tempat, $deskripsi, $data_sesudah, $dibuat_oleh);
         $result = $stmt->execute();
         if (!$result) {
-            error_log("Error catat riwayat: " . $stmt->error);
+            error_log("Error catat riwayat lokasi: " . $stmt->error);
         }
         $stmt->close();
         return $result;
     }
 
-    // PROSES BERDASARKAN LEVEL YANG DIPILIH
+    // ========== PROSES BERDASARKAN LEVEL YANG DIPILIH ==========
+
     if ($selected_level === 'kota') {
         // Proses data kota + kecamatan + desa + lokasi
         if (isset($_POST['kota']) && is_array($_POST['kota'])) {
@@ -133,6 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     
                     if ($status === 'inserted') {
                         $success_count++;
+                        // CATAT RIWAYAT WILAYAH (KOTA)
                         catatRiwayatWilayah($conn, $kode_kota, $nama_kota, 'kota', $provinsi_kode);
                         $messages[] = "✅ Kota {$nama_kota} berhasil ditambahkan";
                         
@@ -147,6 +153,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     
                                     if ($status_kec === 'inserted') {
                                         $success_count++;
+                                        // CATAT RIWAYAT WILAYAH (KECAMATAN)
                                         catatRiwayatWilayah($conn, $kode_kec, $nama_kec, 'kecamatan', $kode_kota);
                                         $messages[] = "  └ ✅ Kecamatan {$nama_kec} berhasil ditambahkan";
                                         
@@ -161,6 +168,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                     
                                                     if ($status_desa === 'inserted') {
                                                         $success_count++;
+                                                        // CATAT RIWAYAT WILAYAH (DESA)
                                                         catatRiwayatWilayah($conn, $kode_desa, $nama_desa, 'desa', $kode_kec);
                                                         $messages[] = "    └ ✅ Desa {$nama_desa} berhasil ditambahkan";
                                                         
@@ -180,6 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                                     
                                                                     if ($result_lokasi['status'] === 'inserted') {
                                                                         $success_count++;
+                                                                        // CATAT RIWAYAT LOKASI
                                                                         catatRiwayatLokasi($conn, $result_lokasi['kode_lokasi'], $lokasiData['nama_tempat'], $kode_desa);
                                                                         $messages[] = "      └ 📍 Lokasi {$lokasiData['nama_tempat']} berhasil ditambahkan (Kode: {$result_lokasi['kode_lokasi']})";
                                                                     } elseif ($result_lokasi['status'] === 'exists_name') {
@@ -231,6 +240,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     
                     if ($status === 'inserted') {
                         $success_count++;
+                        // CATAT RIWAYAT WILAYAH (KECAMATAN)
                         catatRiwayatWilayah($conn, $kode_kec, $nama_kec, 'kecamatan', $selected_parent);
                         $messages[] = "✅ Kecamatan {$nama_kec} berhasil ditambahkan";
                         
@@ -245,6 +255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     
                                     if ($status_desa === 'inserted') {
                                         $success_count++;
+                                        // CATAT RIWAYAT WILAYAH (DESA)
                                         catatRiwayatWilayah($conn, $kode_desa, $nama_desa, 'desa', $kode_kec);
                                         $messages[] = "  └ ✅ Desa {$nama_desa} berhasil ditambahkan";
                                         
@@ -264,6 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                     
                                                     if ($result_lokasi['status'] === 'inserted') {
                                                         $success_count++;
+                                                        // CATAT RIWAYAT LOKASI
                                                         catatRiwayatLokasi($conn, $result_lokasi['kode_lokasi'], $lokasiData['nama_tempat'], $kode_desa);
                                                         $messages[] = "    └ 📍 Lokasi {$lokasiData['nama_tempat']} berhasil ditambahkan (Kode: {$result_lokasi['kode_lokasi']})";
                                                     } elseif ($result_lokasi['status'] === 'exists_name') {
@@ -306,6 +318,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     
                     if ($status === 'inserted') {
                         $success_count++;
+                        // CATAT RIWAYAT WILAYAH (DESA)
                         catatRiwayatWilayah($conn, $kode_desa, $nama_desa, 'desa', $selected_parent);
                         $messages[] = "✅ Desa {$nama_desa} berhasil ditambahkan";
                         
@@ -325,6 +338,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     
                                     if ($result_lokasi['status'] === 'inserted') {
                                         $success_count++;
+                                        // CATAT RIWAYAT LOKASI
                                         catatRiwayatLokasi($conn, $result_lokasi['kode_lokasi'], $lokasiData['nama_tempat'], $kode_desa);
                                         $messages[] = "  └ 📍 Lokasi {$lokasiData['nama_tempat']} berhasil ditambahkan (Kode: {$result_lokasi['kode_lokasi']})";
                                     } elseif ($result_lokasi['status'] === 'exists_name') {
@@ -345,13 +359,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
+        
+    } elseif ($selected_level === 'lokasi') {
+        // Proses data lokasi langsung untuk desa tertentu
+        if (isset($_POST['lokasi']) && is_array($_POST['lokasi'])) {
+            foreach ($_POST['lokasi'] as $lokasiIndex => $lokasiData) {
+                if (!empty($lokasiData['nama_tempat']) && !empty($lokasiData['koordinat'])) {
+                    $result_lokasi = insertLokasi(
+                        $conn,
+                        $selected_parent, // kode_wilayah = kode desa yang dipilih
+                        $lokasiData['nama_tempat'],
+                        $lokasiData['koordinat'],
+                        $lokasiData['keterangan'] ?? '',
+                        $lokasiData['ketersediaan_sinyal'] ?? 'No',
+                        $lokasiData['kecepatan_sinyal'] ?? 0
+                    );
+                    
+                    if ($result_lokasi['status'] === 'inserted') {
+                        $success_count++;
+                        // CATAT RIWAYAT LOKASI
+                        catatRiwayatLokasi($conn, $result_lokasi['kode_lokasi'], $lokasiData['nama_tempat'], $selected_parent);
+                        $messages[] = "📍 Lokasi {$lokasiData['nama_tempat']} berhasil ditambahkan (Kode: {$result_lokasi['kode_lokasi']})";
+                    } elseif ($result_lokasi['status'] === 'exists_name') {
+                        $messages[] = "⚠️ Lokasi {$lokasiData['nama_tempat']} sudah ada di desa ini";
+                    } else {
+                        $error_count++;
+                        $messages[] = "❌ Gagal menambah lokasi {$lokasiData['nama_tempat']}";
+                    }
+                }
+            }
+        }
     }
+
+    // ========== TAMPILKAN HASIL ==========
 
     // Siapkan pesan hasil
     $result_message = "Hasil Proses Tambah Wilayah dan Lokasi:\\n";
     $result_message .= "=====================================\\n";
     $result_message .= "Berhasil: {$success_count} data\\n";
     $result_message .= "Gagal: {$error_count} data\\n\\n";
+    $result_message .= "📝 Semua aktivitas telah tercatat dalam riwayat sistem\\n\\n";
     $result_message .= "Detail:\\n";
     $result_message .= implode("\\n", array_slice($messages, 0, 15)); // Batasi pesan detail
     

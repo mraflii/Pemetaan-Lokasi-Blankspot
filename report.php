@@ -36,7 +36,7 @@ if (!isset($_SESSION['last_report_id']) || $_SESSION['last_report_id'] !== $curr
     ];
     
     $filters_json = json_encode($filters, JSON_UNESCAPED_UNICODE);
-    $nama_laporan = "Laporan Statistik Lokasi " . date('d/m/Y H:i');
+    $nama_laporan = "Laporan Statistik Blankspot " . date('d/m/Y H:i');
     $dibuat_oleh = $_SESSION['username'] ?? 'System'; // Gunakan username dari session
     
     // Gunakan prepared statement untuk keamanan
@@ -64,12 +64,347 @@ if (!isset($_SESSION['last_report_id']) || $_SESSION['last_report_id'] !== $curr
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Laporan Statistik Lokasi - Pemetaan Blankspot</title>
+<title>Laporan Statistik Desa - Pemetaan Blankspot</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
 <!-- Tambahkan library jsPDF -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 <link rel="stylesheet" href="css/report.css">
+<style>
+/* CSS untuk Print */
+@media print {
+    .app-container {
+        display: block !important;
+    }
+    
+    .sidebar {
+        display: none !important;
+    }
+    
+    .main-content {
+        margin-left: 0 !important;
+        width: 100% !important;
+    }
+    
+    .page-header,
+    .actions,
+    .filters,
+    .range-controls,
+    .filter-info,
+    .pagination {
+        display: none !important;
+    }
+    
+    .container {
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+    }
+    
+    .report-header {
+        text-align: center;
+        margin-bottom: 20px;
+        border-bottom: 2px solid #000;
+        padding-bottom: 10px;
+    }
+    
+    .report-title {
+        font-size: 18px !important;
+        margin: 0;
+        color: #000 !important;
+    }
+    
+    .report-subtitle {
+        font-size: 12px !important;
+        margin: 5px 0 0 0;
+        color: #000 !important;
+    }
+    
+    .table-responsive {
+        overflow: visible !important;
+    }
+    
+    #dataTable {
+        width: 100% !important;
+        border-collapse: collapse;
+        font-size: 10px;
+    }
+    
+    #dataTable th,
+    #dataTable td {
+        border: 1px solid #000 !important;
+        padding: 4px 6px;
+        background: white !important;
+        color: #000 !important;
+    }
+    
+    #dataTable th {
+        background: #f8f9fa !important;
+        font-weight: bold;
+        text-align: center;
+    }
+    
+    #dataTable tfoot tr {
+        background: #f8f9fa !important;
+        font-weight: bold;
+    }
+    
+    .status-ada,
+    .status-tidak,
+    .status-unknown,
+    .kecepatan {
+        background: transparent !important;
+        color: #000 !important;
+        padding: 0 !important;
+        border: none !important;
+    }
+    
+    .ada,
+    .tidak {
+        color: #000 !important;
+    }
+    
+    /* Hide elements during print */
+    .no-print {
+        display: none !important;
+    }
+    
+    /* Page break avoidance */
+    table {
+        page-break-inside: auto;
+    }
+    
+    tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+    
+    thead {
+        display: table-header-group;
+    }
+    
+    tfoot {
+        display: table-footer-group;
+    }
+}
+
+/* CSS untuk Excel-like appearance */
+.excel-style {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.excel-style table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.excel-style th,
+.excel-style td {
+    border: 1px solid #d4d4d4;
+    padding: 8px 10px;
+    font-size: 13px;
+}
+
+.excel-style th {
+    background-color: #2c5aa0;
+    color: white;
+    font-weight: 600;
+    text-align: center;
+}
+
+.excel-style tfoot tr {
+    background-color: #f0f7ff;
+    font-weight: 600;
+}
+
+.excel-style .status-ada,
+.excel-style .status-tidak,
+.excel-style .status-unknown {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: normal;
+}
+
+.excel-style .kecepatan {
+    font-weight: normal;
+}
+
+/* Perbaikan untuk pagination - DIPINDAH KE BAWAH TABEL */
+.pagination-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.pagination-info {
+    font-size: 14px;
+    color: #495057;
+    font-weight: 500;
+}
+
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.pagination-buttons {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.pagination-btn {
+    background-color: #2c5aa0;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background-color 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+    background-color: #1e3d6f;
+}
+
+.pagination-btn:disabled {
+    background-color: #a0aec0;
+    cursor: not-allowed;
+}
+
+.pagination-page {
+    font-size: 13px;
+    color: #495057;
+    font-weight: 500;
+}
+
+.jump-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.jump-controls input {
+    width: 60px;
+    padding: 6px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    text-align: center;
+}
+
+/* HAPUS range-info yang lama */
+.range-info {
+    display: none;
+}
+
+/* Perbaikan untuk tabel */
+.table-responsive {
+    margin-top: 20px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 0 10px rgba(0,0,0,0.05);
+}
+
+.excel-style tr:nth-child(even) {
+    background-color: #f8fafc;
+}
+
+.excel-style tr:hover {
+    background-color: #f0f7ff;
+}
+
+.excel-style .kode {
+    font-family: monospace;
+    font-weight: 500;
+}
+
+.excel-style .ada {
+    color: #10b981;
+    font-weight: 600;
+}
+
+.excel-style .tidak {
+    color: #ef4444;
+    font-weight: 600;
+}
+
+.status-ada {
+    background-color: #d1fae5;
+    color: #065f46;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.status-tidak {
+    background-color: #fee2e2;
+    color: #991b1b;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.status-unknown {
+    background-color: #e5e7eb;
+    color: #374151;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.kecepatan {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1e40af;
+    background: #dbeafe;
+    padding: 4px 8px;
+    border-radius: 4px;
+    text-align: center;
+}
+
+/* Responsif untuk mobile */
+@media (max-width: 768px) {
+    .pagination-container {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .pagination-controls {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .pagination-buttons {
+        order: 2;
+    }
+    
+    .jump-controls {
+        order: 1;
+    }
+    
+    .excel-style th,
+    .excel-style td {
+        padding: 6px 8px;
+        font-size: 12px;
+    }
+}
+
+/* Hapus range-controls yang lama */
+.range-controls {
+    display: none;
+}
+</style>
 </head>
 <body>
     <div class="app-container">
@@ -79,7 +414,7 @@ if (!isset($_SESSION['last_report_id']) || $_SESSION['last_report_id'] !== $curr
         <!-- Main Content -->
         <div class="main-content">
             <!-- Header -->
-            <div class="page-header fade-in">
+            <div class="page-header fade-in no-print">
                 <div class="header-title">
                     <h1><i class="fas fa-chart-bar"></i> Laporan Statistik</h1>
                     <p>Analisis dan statistik data ketersediaan sinyal berdasarkan desa</p>
@@ -102,14 +437,14 @@ if (!isset($_SESSION['last_report_id']) || $_SESSION['last_report_id'] !== $curr
 
             <div class="container fade-in">
                 <!-- Actions -->
-                <div class="actions">
+                <div class="actions no-print">
                     <div class="btn-group">
                         <button onclick="exportToPDF()" class="action-btn">
                             <i class="fas fa-file-pdf"></i> Export PDF
                         </button>
-                        <a href="export_excel.php" id="btnExcel" class="action-btn btn-excel">
+                        <button onclick="exportToExcel()" class="action-btn btn-excel">
                             <i class="fas fa-file-excel"></i> Export Excel
-                        </a>
+                        </button>
                         <button onclick="clearFilters()" class="action-btn btn-reset">
                             <i class="fas fa-refresh"></i> Reset Filter
                         </button>
@@ -121,12 +456,12 @@ if (!isset($_SESSION['last_report_id']) || $_SESSION['last_report_id'] !== $curr
 
                 <!-- Header Report -->
                 <div class="report-header">
-                    <h1 class="report-title">LAPORAN STATISTIK LOKASI</h1>
-                    <p class="report-subtitle">Sistem Pemetaan Ketersediaan Sinyal Berdasarkan Desa</p>
+                    <h1 class="report-title">LAPORAN STATISTIK DESA BLANKSPOT</h1>
+                    <p class="report-subtitle">Sistem Pemetaan Desa Blankspot di Aceh</p>
                 </div>
 
                 <!-- Filter Area -->
-                <div class="filters">
+                <div class="filters no-print">
                     <div class="filter-group">
                         <label><i class="fas fa-map-marker-alt"></i> Provinsi:</label>
                         <select id="provinsi"><option value="">-- Semua Provinsi --</option></select>
@@ -145,8 +480,8 @@ if (!isset($_SESSION['last_report_id']) || $_SESSION['last_report_id'] !== $curr
                     </div>
                 </div>
 
-                <!-- Controls untuk Range Data -->
-                <div class="range-controls">
+                <!-- Controls untuk Range Data - DISEMBUNYIKAN -->
+                <div class="range-controls no-print" style="display: none;">
                     <div class="range-group">
                         <label><i class="fas fa-list"></i> Tampilkan data:</label>
                         <select id="recordsPerPage" onchange="changeRecordsPerPage()">
@@ -174,7 +509,7 @@ if (!isset($_SESSION['last_report_id']) || $_SESSION['last_report_id'] !== $curr
                 </div>
 
                 <!-- Info Filter Aktif -->
-                <div class="filter-info">
+                <div class="filter-info no-print">
                     <strong><i class="fas fa-filter"></i> Filter Aktif:</strong>
                     <div class="filter-path" id="filterText">
                         <span class="filter-all">SEMUA WILAYAH INDONESIA</span>
@@ -183,7 +518,7 @@ if (!isset($_SESSION['last_report_id']) || $_SESSION['last_report_id'] !== $curr
 
                 <!-- Tabel Data -->
                 <div class="table-responsive">
-                    <table id="dataTable">
+                    <table id="dataTable" class="excel-style">
                         <thead id="tableHead">
                             <!-- Header akan diisi JavaScript -->
                         </thead>
@@ -196,8 +531,8 @@ if (!isset($_SESSION['last_report_id']) || $_SESSION['last_report_id'] !== $curr
                     </table>
                 </div>
 
-                <!-- Pagination -->
-                <div class="pagination" id="paginationContainer">
+                <!-- Pagination - DIPINDAH KE BAWAH TABEL dan MENGGABUNGKAN INFO DATA -->
+                <div class="pagination-container no-print" id="paginationContainer">
                     <!-- Pagination akan diisi JavaScript -->
                 </div>
             </div>
@@ -288,7 +623,7 @@ async function handleFetchResponse(response) {
     return response.json();
 }
 
-// Fungsi untuk export ke PDF yang menyesuaikan dengan filter
+// Fungsi untuk export ke PDF dengan TOTAL yang di-merge
 async function exportToPDF() {
     loading.classList.add('show');
     
@@ -308,8 +643,8 @@ async function exportToPDF() {
         // Header PDF - SEMUA DITENGAH
         const pageWidth = pdf.internal.pageSize.getWidth();
         
-        const title = "LAPORAN STATISTIK LOKASI";
-        const subtitle = "Sistem Pemetaan Ketersediaan Sinyal Berdasarkan Desa";
+        const title = "LAPORAN STATISTIK BLANKSPOT";
+        const subtitle = "Sistem Pemetaan Desa Blankspot di Aceh";
         const filterInfo = getFilterTextForPDF();
         const dateInfo = `Dicetak pada: ${new Date().toLocaleDateString('id-ID')} ${new Date().toLocaleTimeString('id-ID')}`;
         
@@ -328,6 +663,7 @@ async function exportToPDF() {
         
         // Tentukan header tabel berdasarkan filter yang aktif
         let headers, columnStyles, tableData;
+        let totalColspan = 0; // Untuk menentukan berapa kolom yang akan di-merge
         
         if (d) {
             // Level Desa → detail lokasi dengan kolom lengkap
@@ -339,8 +675,9 @@ async function exportToPDF() {
                 3: { cellWidth: 35, halign: 'center' },
                 4: { cellWidth: 40, halign: 'left' },
                 5: { cellWidth: 20, halign: 'center' },
-                6: { cellWidth: 20, halign: 'center' }
+                6: { cellWidth: 22, halign: 'center' }
             };
+            totalColspan = 3; // Untuk level desa, TOTAL akan merge 3 kolom pertama
             
         } else {
             // Untuk semua level di atas desa, gunakan struktur berdasarkan desa
@@ -354,8 +691,9 @@ async function exportToPDF() {
                     3: { cellWidth: 20, halign: 'center' },
                     4: { cellWidth: 20, halign: 'center' },
                     5: { cellWidth: 20, halign: 'center' },
-                    6: { cellWidth: 25, halign: 'center' }
+                    6: { cellWidth: 22, halign: 'center' }
                 };
+                totalColspan = 3; // Untuk level kecamatan, TOTAL akan merge 3 kolom pertama
                 
             } else if (k) {
                 // Level Kota → tampil kecamatan
@@ -367,8 +705,9 @@ async function exportToPDF() {
                     3: { cellWidth: 20, halign: 'center' },
                     4: { cellWidth: 20, halign: 'center' },
                     5: { cellWidth: 20, halign: 'center' },
-                    6: { cellWidth: 25, halign: 'center' }
+                    6: { cellWidth: 22, halign: 'center' }
                 };
+                totalColspan = 3; // Untuk level kota, TOTAL akan merge 3 kolom pertama
                 
             } else if (p) {
                 // Level Provinsi → tampil kota
@@ -377,27 +716,29 @@ async function exportToPDF() {
                     0: { cellWidth: 15, halign: 'center' },
                     1: { cellWidth: 25, halign: 'center' },
                     2: { cellWidth: 40, halign: 'left' },
-                    3: { cellWidth: 20, halign: 'center' },
+                    3: { cellWidth: 25, halign: 'center' },
                     4: { cellWidth: 20, halign: 'center' },
                     5: { cellWidth: 20, halign: 'center' },
                     6: { cellWidth: 20, halign: 'center' },
-                    7: { cellWidth: 25, halign: 'center' }
+                    7: { cellWidth: 22, halign: 'center' }
                 };
+                totalColspan = 3; // Untuk level provinsi, TOTAL akan merge 3 kolom pertama
                 
             } else {
                 // Level Nasional → tampil provinsi
                 headers = ['No', 'Kode Provinsi', 'Nama Provinsi', 'Jumlah Kota', 'Jumlah Kecamatan', 'Jumlah Desa', 'Desa Ada Sinyal', 'Desa Blankspot', 'Persentase'];
                 columnStyles = {
-                    0: { cellWidth: 15, halign: 'center' },
-                    1: { cellWidth: 25, halign: 'center' },
-                    2: { cellWidth: 40, halign: 'left' },
+                    0: { cellWidth: 10, halign: 'center' },
+                    1: { cellWidth: 20, halign: 'center' },
+                    2: { cellWidth: 30, halign: 'left' },
                     3: { cellWidth: 20, halign: 'center' },
-                    4: { cellWidth: 20, halign: 'center' },
+                    4: { cellWidth: 25, halign: 'center' },
                     5: { cellWidth: 20, halign: 'center' },
                     6: { cellWidth: 20, halign: 'center' },
                     7: { cellWidth: 20, halign: 'center' },
-                    8: { cellWidth: 25, halign: 'center' }
+                    8: { cellWidth: 22, halign: 'center' }
                 };
+                totalColspan = 3; // Untuk level nasional, TOTAL akan merge 3 kolom pertama
             }
         }
         
@@ -405,8 +746,8 @@ async function exportToPDF() {
         if (d) {
             // Format data untuk level desa (detail lokasi)
             tableData = allData.map((row, index) => {
-                const statusSinyal = row.ketersediaan_sinyal === 'Yes' ? 'Ada ' : 
-                                   row.ketersediaan_sinyal === 'No' ? 'Tidak Ada ' : 'Tidak Diketahui';
+                const statusSinyal = row.ketersediaan_sinyal === 'Yes' ? 'Ada' : 
+                                   row.ketersediaan_sinyal === 'No' ? 'Tidak Ada' : 'Tidak Diketahui';
                 const kecepatanSinyal = row.kecepatan_sinyal > 0 ? 
                     `${row.kecepatan_sinyal} Mbps` : '-';
                 
@@ -487,89 +828,92 @@ async function exportToPDF() {
                 }
             });
             
-            // Tambahkan total row untuk statistik
+            // Tambahkan total row untuk statistik dengan MERGE CELLS
             if (!d && allData.length > 0) {
                 const totals = calculateTotals(allData);
+                
+                // Buat array untuk row TOTAL dengan cell yang di-merge
+                let totalRow = [];
                 
                 if (kc) {
                     // Level Kecamatan
                     const totalPersentase = totals.totalLokasi > 0 ? ((totals.totalLokasiAda / totals.totalLokasi) * 100).toFixed(1) : 0;
-                    tableData.push([
-                        'TOTAL',
-                        '',
-                        '',
+                    totalRow = [
+                        { content: 'TOTAL', colSpan: totalColspan, styles: { halign: 'center', fontStyle: 'bold' } },
                         totals.totalLokasi.toLocaleString(),
                         totals.totalLokasiAda.toLocaleString(),
                         totals.totalLokasiBlankspot.toLocaleString(),
                         totalPersentase + '%'
-                    ]);
+                    ];
                 } else if (k) {
                     // Level Kota
-                    tableData.push([
-                        'TOTAL',
-                        '',
-                        '',
+                    totalRow = [
+                        { content: 'TOTAL', colSpan: totalColspan, styles: { halign: 'center', fontStyle: 'bold' } },
                         totals.totalDesa.toLocaleString(),
                         totals.totalDesaAda.toLocaleString(),
                         totals.totalDesaBlankspot.toLocaleString(),
                         totals.totalPersentase + '%'
-                    ]);
+                    ];
                 } else if (p) {
                     // Level Provinsi
-                    tableData.push([
-                        'TOTAL',
-                        '',
-                        '',
+                    totalRow = [
+                        { content: 'TOTAL', colSpan: totalColspan, styles: { halign: 'center', fontStyle: 'bold' } },
                         totals.totalKecamatan.toLocaleString(),
                         totals.totalDesa.toLocaleString(),
                         totals.totalDesaAda.toLocaleString(),
                         totals.totalDesaBlankspot.toLocaleString(),
                         totals.totalPersentase + '%'
-                    ]);
+                    ];
                 } else {
                     // Level Nasional
-                    tableData.push([
-                        'TOTAL',
-                        '',
-                        '',
+                    totalRow = [
+                        { content: 'TOTAL', colSpan: totalColspan, styles: { halign: 'center', fontStyle: 'bold' } },
                         totals.totalKota.toLocaleString(),
                         totals.totalKecamatan.toLocaleString(),
                         totals.totalDesa.toLocaleString(),
                         totals.totalDesaAda.toLocaleString(),
                         totals.totalDesaBlankspot.toLocaleString(),
                         totals.totalPersentase + '%'
-                    ]);
+                    ];
                 }
+                
+                // Tambahkan row TOTAL ke tableData
+                tableData.push(totalRow);
             }
         }
         
-        // Buat tabel dengan autoTable
-        pdf.autoTable({
+        const tableConfig = {
             startY: 48,
             head: [headers],
             body: tableData,
             theme: 'grid',
             headStyles: {
-                fillColor: [30, 41, 59],
-                textColor: 255,
+                fillColor: false, 
+                textColor: 0,     
                 fontStyle: 'bold',
                 halign: 'center',
                 fontSize: 8,
-                cellPadding: 3
+                cellPadding: 3,
+                lineWidth: 0.1,
+                lineColor: 0
             },
             bodyStyles: {
                 halign: 'center',
                 fontSize: 7,
                 cellPadding: 2,
-                minCellHeight: 7
+                minCellHeight: 7,
+                fillColor: false, 
+                textColor: 0,     
+                lineWidth: 0.1,
+                lineColor: 0
             },
             styles: {
                 fontSize: 7,
                 cellPadding: 2,
                 overflow: 'linebreak',
-                textColor: [0, 0, 0],
+                textColor: 0, 
                 lineWidth: 0.1,
-                lineColor: [200, 200, 200]
+                lineColor: 0  
             },
             columnStyles: columnStyles,
             margin: { 
@@ -581,26 +925,32 @@ async function exportToPDF() {
             didDrawPage: function(data) {
                 // Footer pada setiap halaman - DITENGAH
                 pdf.setFontSize(7);
-                pdf.setTextColor(128);
-                pdf.text(`Halaman ${data.pageNumber} - Laporan Statistik Lokasi`, 
+                pdf.setTextColor(0); 
+                pdf.text(`Halaman ${data.pageNumber} - Laporan Statistik Blankspot`, 
                         pageWidth / 2, 
                         pdf.internal.pageSize.getHeight() - 10, 
                         { align: 'center' });
             },
-            // Styling untuk row total (hanya untuk statistik)
-            didParseCell: function(data) {
+            // Custom styling untuk row TOTAL
+            willDrawCell: function(data) {
+                // Jika ini adalah row terakhir (TOTAL) dan bukan level desa
                 if (!d && data.row.index === tableData.length - 1) {
-                    data.cell.styles.fillColor = [30, 41, 59];
-                    data.cell.styles.textColor = [255, 255, 255];
-                    data.cell.styles.fontStyle = 'bold';
-                    data.cell.styles.fontSize = 8;
+                    // Beri background yang berbeda untuk row TOTAL
+                    data.doc.setFillColor(240, 240, 240);
+                    data.doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
+                    
+                    // Teks bold untuk TOTAL
+                    data.doc.setFont(undefined, 'bold');
+                    data.doc.setTextColor(0);
                 }
             },
             // Optimasi untuk banyak data
             pageBreak: 'auto',
             rowPageBreak: 'avoid',
             showHead: 'everyPage'
-        });
+        };
+        
+        pdf.autoTable(tableConfig);
         
         // Simpan PDF dengan nama file yang sesuai
         let fileName = 'Laporan_Statistik_Lokasi';
@@ -627,6 +977,64 @@ async function exportToPDF() {
     } finally {
         loading.classList.remove('show');
     }
+}
+
+// Fungsi untuk export ke Excel
+function exportToExcel() {
+    loading.classList.add('show');
+    
+    try {
+        const p = provinsi.value;
+        const k = kota.value;
+        const kc = kecamatan.value;
+        const d = desa.value;
+        
+        // Redirect ke export_excel.php dengan parameter filter
+        window.location.href = `export_excel.php?provinsi=${p}&kota=${k}&kecamatan=${kc}&desa=${d}`;
+        
+    } catch (error) {
+        console.error('Error exporting to Excel:', error);
+        showError('Terjadi kesalahan saat export Excel: ' + error.message);
+    } finally {
+        setTimeout(() => {
+            loading.classList.remove('show');
+        }, 2000);
+    }
+}
+
+// Fungsi untuk print dengan tampilan yang rapi
+function setupPrint() {
+    // Tambahkan header print sebelum mencetak
+    const beforePrint = () => {
+        // Tambahkan info filter di header
+        const printHeader = document.createElement('div');
+        printHeader.style.cssText = `
+            text-align: center;
+            margin-bottom: 15px;
+            padding: 10px;
+            border-bottom: 1px solid #000;
+            font-size: 12px;
+        `;
+        printHeader.innerHTML = `
+            <div><strong>${getFilterTextForPDF()}</strong></div>
+            <div>Dicetak pada: ${new Date().toLocaleDateString('id-ID')} ${new Date().toLocaleTimeString('id-ID')}</div>
+        `;
+        
+        const container = document.querySelector('.container');
+        container.insertBefore(printHeader, container.firstChild);
+    };
+    
+    const afterPrint = () => {
+        // Hapus header print setelah selesai
+        const printHeader = document.querySelector('.container div:first-child');
+        if (printHeader && printHeader.style.textAlign === 'center') {
+            printHeader.remove();
+        }
+    };
+    
+    // Event listeners untuk print
+    window.addEventListener('beforeprint', beforePrint);
+    window.addEventListener('afterprint', afterPrint);
 }
 
 // Fungsi untuk menghitung total (hanya untuk statistik)
@@ -1046,7 +1454,7 @@ function displayStatistikDesa(pageData, startIndex) {
     if (kecamatan.value) {
         const totalPersentase = totalLokasi > 0 ? ((totalLokasiAda / totalLokasi) * 100).toFixed(1) : 0;
         tableFooter.innerHTML = `
-            <tr style="background: var(--gradient-primary); color: white; font-weight: 600;">
+            <tr style="background: #f0f7ff; font-weight: 600;">
                 <td colspan="3">TOTAL</td>
                 <td>${totalLokasi.toLocaleString()}</td>
                 <td>${totalLokasiAda.toLocaleString()}</td>
@@ -1057,7 +1465,7 @@ function displayStatistikDesa(pageData, startIndex) {
     } else if (kota.value) {
         const totalPersentase = totalDesa > 0 ? ((totalDesaAda / totalDesa) * 100).toFixed(1) : 0;
         tableFooter.innerHTML = `
-            <tr style="background: var(--gradient-primary); color: white; font-weight: 600;">
+            <tr style="background: #f0f7ff; font-weight: 600;">
                 <td colspan="3">TOTAL</td>
                 <td>${totalDesa.toLocaleString()}</td>
                 <td>${totalDesaAda.toLocaleString()}</td>
@@ -1068,7 +1476,7 @@ function displayStatistikDesa(pageData, startIndex) {
     } else if (provinsi.value) {
         const totalPersentase = totalDesa > 0 ? ((totalDesaAda / totalDesa) * 100).toFixed(1) : 0;
         tableFooter.innerHTML = `
-            <tr style="background: var(--gradient-primary); color: white; font-weight: 600;">
+            <tr style="background: #f0f7ff; font-weight: 600;">
                 <td colspan="3">TOTAL</td>
                 <td>${totalKecamatan.toLocaleString()}</td>
                 <td>${totalDesa.toLocaleString()}</td>
@@ -1080,7 +1488,7 @@ function displayStatistikDesa(pageData, startIndex) {
     } else {
         const totalPersentase = totalDesa > 0 ? ((totalDesaAda / totalDesa) * 100).toFixed(1) : 0;
         tableFooter.innerHTML = `
-            <tr style="background: var(--gradient-primary); color: white; font-weight: 600;">
+            <tr style="background: #f0f7ff; font-weight: 600;">
                 <td colspan="3">TOTAL</td>
                 <td>${totalKota.toLocaleString()}</td>
                 <td>${totalKecamatan.toLocaleString()}</td>
@@ -1104,7 +1512,6 @@ function displayPage(page, data) {
     if (pageData.length === 0) {
         const colspan = desa.value ? 7 : (kecamatan.value ? 7 : (kota.value ? 7 : (provinsi.value ? 8 : 9)));
         tableBody.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center; padding: 30px; color: #64748b;">Tidak ada data yang sesuai dengan filter</td></tr>`;
-        rangeInfo.textContent = 'Tidak ada data untuk ditampilkan';
         paginationContainer.innerHTML = '';
         return;
     }
@@ -1119,20 +1526,15 @@ function displayPage(page, data) {
         displayStatistikDesa(pageData, startIndex);
     }
     
-    // Update info range
-    const startRecord = startIndex + 1;
-    const endRecord = endIndex;
-    rangeInfo.textContent = `Menampilkan ${startRecord}-${endRecord} dari ${data.length.toLocaleString()} data`;
-    
     // Update input lompat ke halaman
     jumpToPageInput.value = page;
     jumpToPageInput.max = Math.ceil(data.length / (recordsPerPage || 1));
     
-    // Update info pagination
+    // Update info pagination - SEKARANG MENGGABUNGKAN INFO DATA
     updatePaginationInfo(data.length, page);
 }
 
-// Fungsi untuk update info pagination
+// Fungsi untuk update info pagination - DIPERBAIKI UNTUK MENGGABUNGKAN INFO DATA
 function updatePaginationInfo(totalRecords, currentPage) {
     const totalPages = Math.ceil(totalRecords / (recordsPerPage || 1));
     const startRecord = ((currentPage - 1) * recordsPerPage) + 1;
@@ -1200,7 +1602,6 @@ function loadTable(){
         if(!data || data.length === 0){
             const colspan = d ? 7 : (kc ? 7 : (k ? 7 : (p ? 8 : 9)));
             tableBody.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center; padding: 30px; color: #64748b;">Tidak ada data yang sesuai dengan filter</td></tr>`;
-            rangeInfo.textContent = 'Tidak ada data untuk ditampilkan';
             paginationContainer.innerHTML = '';
         } else {
             // Update header terlebih dahulu
@@ -1220,9 +1621,6 @@ function loadTable(){
         // Sembunyikan loading
         loading.classList.remove('show');
     });
-
-    // Update tombol export
-    document.getElementById('btnExcel').href = `export_excel.php?provinsi=${p}&kota=${k}&kecamatan=${kc}&desa=${d}`;
 }
 
 // Reset dropdown yang lebih rendah
@@ -1283,11 +1681,14 @@ desa.addEventListener('change', () => {
 window.addEventListener('load', adjustForMobile);
 window.addEventListener('resize', adjustForMobile);
 
+// Setup print functionality
+window.addEventListener('load', setupPrint);
+
 // Init
 loadDropdown('provinsi');
 loadTable();
 
-// Tambahkan CSS untuk animasi notifikasi dan status
+// Tambahkan CSS untuk animasi notifikasi
 const style = document.createElement('style');
 style.textContent = `
     @keyframes slideInRight {
@@ -1298,33 +1699,9 @@ style.textContent = `
         from { transform: translateX(0); opacity: 1; }
         to { transform: translateX(100%); opacity: 0; }
     }
-    .status-ada {
-        background: #10b981;
-        color: white;
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-size: 12px;
-        font-weight: 600;
-    }
-    .status-tidak {
-        background: #ef4444;
-        color: white;
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-size: 12px;
-        font-weight: 600;
-    }
-    .status-unknown {
-        background: #6b7280;
-        color: white;
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-size: 12px;
-        font-weight: 600;
-    }
     .koordinat {
         font-family: monospace;
-        font-size: 12px;
+        font-size: 13px;
     }
     .keterangan {
         max-width: 200px;
@@ -1332,29 +1709,7 @@ style.textContent = `
         text-overflow: ellipsis;
         white-space: nowrap;
     }
-    .kecepatan {
-        font-family: 'Courier New', monospace;
-        font-size: 12px;
-        font-weight: 600;
-        color: #1e40af;
-        background: #dbeafe;
-        padding: 4px 8px;
-        border-radius: 4px;
-        text-align: center;
-    }
-    .ada {
-        color: #10b981;
-        font-weight: 600;
-    }
-    .tidak {
-        color: #ef4444;
-        font-weight: 600;
-    }
     @media (max-width: 768px) {
-        .kecepatan {
-            font-size: 10px;
-            padding: 2px 4px;
-        }
         .keterangan {
             max-width: 120px;
         }

@@ -2,22 +2,24 @@
 session_start();
 include "../config/db.php";
 
-// Cek apakah user sudah login dan memiliki akses Super Admin
-if (!isset($_SESSION['user_id']) || $_SESSION['peran'] !== 'Super Admin') {
-    header('Location: ../login.php');
+// Cek apakah user sudah login dan memiliki akses Super Admin atau Admin
+if (!isset($_SESSION['user_id']) || ($_SESSION['peran'] !== 'Super Admin' && $_SESSION['peran'] !== 'Admin')) {
+    $_SESSION['message'] = "Anda tidak memiliki akses untuk menambah user!";
+    $_SESSION['message_type'] = 'error';
+    header('Location: ../manage_users.php');
     exit();
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Ambil data dari form
-    $username = trim($_POST['username']);
-    $nama_user = trim($_POST['nama_user']);
-    $email = trim($_POST['email']);
-    $telepon = trim($_POST['telepon']);
-    $password = $_POST['password'];
-    $confirm_password = $_POST['confirm_password'];
-    $peran = $_POST['peran'];
-    $status_aktif = intval($_POST['status_aktif']);
+    $username = trim($_POST['username'] ?? '');
+    $nama_user = trim($_POST['nama_user'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $telepon = trim($_POST['telepon'] ?? '');
+    $password = $_POST['password'] ?? '';
+    $confirm_password = $_POST['confirm_password'] ?? '';
+    $peran = $_POST['peran'] ?? '';
+    $status_aktif = intval($_POST['status_aktif'] ?? 1);
     $dibuat_oleh = $_SESSION['user_id'];
     
     // Validasi input
@@ -50,10 +52,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = "Password dan konfirmasi password tidak sama!";
     }
     
-    // Cek peran valid
-    $allowed_roles = ['Super Admin', 'Admin', 'User'];
+    // Cek peran valid berdasarkan hak akses user yang login
+    $current_user_role = $_SESSION['peran'];
+    $allowed_roles = ['User']; // Default untuk semua
+    
+    if ($current_user_role === 'Super Admin') {
+        $allowed_roles = ['Super Admin', 'Admin', 'User'];
+    } elseif ($current_user_role === 'Admin') {
+        $allowed_roles = ['Admin', 'User'];
+    }
+    
     if (!in_array($peran, $allowed_roles)) {
-        $errors[] = "Peran tidak valid!";
+        $errors[] = "Peran tidak valid untuk level akses Anda!";
     }
     
     // Validasi karakter username (hanya huruf, angka, underscore)
@@ -82,7 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Hash password
                 $hashed_password = password_hash($password, PASSWORD_DEFAULT);
                 
-                // PERBAIKAN: Gunakan kolom 'password' bukan 'password_hash'
+                // Insert user baru
                 $insert_query = "INSERT INTO users (username, password, nama_user, email, telepon, peran, status_aktif, dibuat_oleh, dibuat_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())";
                 $insert_stmt = $conn->prepare($insert_query);
                 
@@ -93,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $insert_stmt->bind_param("ssssssii", $username, $hashed_password, $nama_user, $email, $telepon, $peran, $status_aktif, $dibuat_oleh);
                 
                 if ($insert_stmt->execute()) {
-                    $_SESSION['message'] = "User <strong>$username</strong> berhasil ditambahkan!";
+                    $_SESSION['message'] = "User <strong>$username</strong> berhasil ditambahkan dengan peran <strong>$peran</strong>!";
                     $_SESSION['message_type'] = 'success';
                     header('Location: ../manage_users.php');
                     exit();

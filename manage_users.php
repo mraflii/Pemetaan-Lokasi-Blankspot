@@ -2,9 +2,18 @@
 session_start();
 include "config/db.php";
 
-// Cek apakah user sudah login dan memiliki akses Super Admin
-if (!isset($_SESSION['user_id']) || $_SESSION['peran'] !== 'Super Admin') {
+// Cek apakah user sudah login
+if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
+    exit();
+}
+
+// Cek apakah user memiliki akses Super Admin atau Admin
+$current_user_role = $_SESSION['peran'] ?? '';
+if ($current_user_role !== 'Super Admin' && $current_user_role !== 'Admin') {
+    $_SESSION['message'] = "Anda tidak memiliki akses ke halaman ini!";
+    $_SESSION['message_type'] = 'error';
+    header('Location: dashboard.php');
     exit();
 }
 
@@ -25,7 +34,18 @@ if (isset($_SESSION['message'])) {
 }
 
 // Ambil data users dengan error handling
-$users_query = "SELECT * FROM users ORDER BY dibuat_pada DESC";
+$current_user_id = $_SESSION['user_id'];
+$current_user_role = $_SESSION['peran'];
+
+// Query berdasarkan role
+if ($current_user_role === 'Super Admin') {
+    // Super Admin bisa lihat semua user
+    $users_query = "SELECT * FROM users ORDER BY dibuat_pada DESC";
+} else {
+    // Admin hanya bisa lihat user biasa dan admin lain (bukan Super Admin)
+    $users_query = "SELECT * FROM users WHERE peran != 'Super Admin' ORDER BY dibuat_pada DESC";
+}
+
 $users_result = $conn->query($users_query);
 
 // Handle query error
@@ -41,13 +61,24 @@ if ($users_result === false) {
 }
 
 // Hitung statistik dengan error handling
-$stats_query = "SELECT 
-    COUNT(*) as total_users,
-    SUM(status_aktif = 1) as active_users,
-    SUM(peran = 'Super Admin') as super_admins,
-    SUM(peran = 'Admin') as admins,
-    SUM(peran = 'User') as regular_users
-    FROM users";
+if ($current_user_role === 'Super Admin') {
+    $stats_query = "SELECT 
+        COUNT(*) as total_users,
+        SUM(status_aktif = 1) as active_users,
+        SUM(peran = 'Super Admin') as super_admins,
+        SUM(peran = 'Admin') as admins,
+        SUM(peran = 'User') as regular_users
+        FROM users";
+} else {
+    $stats_query = "SELECT 
+        COUNT(*) as total_users,
+        SUM(status_aktif = 1) as active_users,
+        0 as super_admins,
+        SUM(peran = 'Admin') as admins,
+        SUM(peran = 'User') as regular_users
+        FROM users WHERE peran != 'Super Admin'";
+}
+
 $stats_result = $conn->query($stats_query);
 
 if ($stats_result === false) {
@@ -67,22 +98,45 @@ if ($stats_result === false) {
 $edit_user = null;
 if (isset($_GET['edit_id'])) {
     $edit_id = intval($_GET['edit_id']);
-    $stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
-    $stmt->bind_param("i", $edit_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
     
-    if ($result->num_rows > 0) {
-        $edit_user = $result->fetch_assoc();
-        // Cek apakah user mencoba mengedit dirinya sendiri
-        if ($edit_user['id'] == $_SESSION['user_id']) {
-            $_SESSION['message'] = "Tidak dapat mengedit akun sendiri!";
-            $_SESSION['message_type'] = 'error';
-            header('Location: manage_users.php');
-            exit();
+    // Cek apakah user boleh mengedit user ini
+    $allowed_to_edit = false;
+    
+    if ($current_user_role === 'Super Admin') {
+        // Super Admin bisa edit semua user
+        $allowed_to_edit = true;
+    } else {
+        // Admin hanya bisa edit user biasa dan admin lain (bukan Super Admin)
+        $check_stmt = $conn->prepare("SELECT peran FROM users WHERE id = ?");
+        $check_stmt->bind_param("i", $edit_id);
+        $check_stmt->execute();
+        $check_result = $check_stmt->get_result();
+        
+        if ($check_result->num_rows > 0) {
+            $target_user = $check_result->fetch_assoc();
+            if ($target_user['peran'] !== 'Super Admin') {
+                $allowed_to_edit = true;
+            }
         }
+        $check_stmt->close();
     }
-    $stmt->close();
+    
+    if ($allowed_to_edit) {
+        $stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
+        $stmt->bind_param("i", $edit_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($result->num_rows > 0) {
+            $edit_user = $result->fetch_assoc();
+        }
+        $stmt->close();
+    } else {
+        $_SESSION['message'] = "Anda tidak memiliki akses untuk mengedit user ini!";
+        $_SESSION['message_type'] = 'error';
+        header('Location: manage_users.php');
+        exit();
+    }
 }
 ?>
 
@@ -107,14 +161,25 @@ if (isset($_GET['edit_id'])) {
         <div class="page-header fade-in">
             <div class="header-title">
                 <h1><i class="fas fa-users-cog"></i> Kelola Pengguna</h1>
-                <p>Manajemen akun pengguna sistem Blankspot Maps</p>
+                <p>
+                    <?php if ($current_user_role === 'Super Admin'): ?>
+                        Manajemen semua akun pengguna sistem Blankspot Maps
+                    <?php else: ?>
+                        Manajemen akun User dan Admin sistem Blankspot Maps
+                    <?php endif; ?>
+                </p>
             </div>
             <div class="header-actions">
                 <button onclick="location.reload()" class="btn btn-light">
                     <i class="fas fa-sync-alt"></i> Refresh
                 </button>
                 <button class="btn btn-primary" onclick="openAddModal()">
-                    <i class="fas fa-user-plus"></i> Tambah User
+                    <i class="fas fa-user-plus"></i> 
+                    <?php if ($current_user_role === 'Super Admin'): ?>
+                        Tambah User
+                    <?php else: ?>
+                        Tambah User/Admin
+                    <?php endif; ?>
                 </button>
             </div>
         </div>
@@ -180,49 +245,67 @@ if (isset($_GET['edit_id'])) {
                                     </td>
                                     <td>
                                         <div class="action-buttons">
-                                            <?php if ($user['id'] != $_SESSION['user_id']): ?>
-                                                <!-- Tombol Edit -->
-                                                <button class="btn btn-light btn-sm" onclick="openEditModal(<?= $user['id'] ?>)" title="Edit User">
+                                            <?php if ($user['id'] == $_SESSION['user_id']): ?>
+                                                <!-- Untuk akun sendiri -->
+                                                <button class="btn btn-light btn-sm" onclick="openEditModal(<?= $user['id'] ?>)" title="Edit Akun Sendiri">
                                                     <i class="fas fa-edit icon-edit"></i>
                                                 </button>
-                                                
-                                                <!-- Tombol Hapus -->
-                                                <a href="proses/proses_hapus_user.php?id=<?= $user['id'] ?>" 
-                                                   class="btn btn-light btn-sm"
-                                                   onclick="return confirm('Hapus user <?= $user['username'] ?>? Tindakan ini tidak dapat dibatalkan!')"
-                                                   title="Hapus User">
-                                                    <i class="fas fa-trash icon-delete"></i>
-                                                </a>
-                                                
-                                                <!-- Tombol Aktif/Nonaktif -->
-                                                <?php if ($user['status_aktif']): ?>
-                                                    <a href="proses/proses_aktifkan_user.php?id=<?= $user['id'] ?>&action=deactivate" 
-                                                       class="btn btn-light btn-sm"
-                                                       onclick="return confirm('Nonaktifkan user <?= $user['username'] ?>?')"
-                                                       title="Nonaktifkan User">
-                                                        <i class="fas fa-pause icon-deactivate"></i>
-                                                    </a>
-                                                <?php else: ?>
-                                                    <a href="proses/proses_aktifkan_user.php?id=<?= $user['id'] ?>&action=activate" 
-                                                       class="btn btn-light btn-sm"
-                                                       onclick="return confirm('Aktifkan user <?= $user['username'] ?>?')"
-                                                       title="Aktifkan User">
-                                                        <i class="fas fa-play icon-activate"></i>
-                                                    </a>
-                                                <?php endif; ?>
+                                                <span class="badge secondary" title="Tidak dapat menghapus akun sendiri">
+                                                    <i class="fas fa-trash"></i>
+                                                </span>
+                                                <span class="badge secondary" title="Akun sudah aktif">
+                                                    <i class="fas fa-check-circle"></i>
+                                                </span>
                                             <?php else: ?>
-                                                <!-- Untuk akun sendiri, tampilkan ikon yang sama tapi dengan badge -->
-                                                <div class="action-buttons">
-                                                    <span class="badge secondary" title="Edit Akun Sendiri">
-                                                        <i class="fas fa-edit"></i>
+                                                <!-- Untuk user lain -->
+                                                <?php if ($current_user_role === 'Super Admin' || ($current_user_role === 'Admin' && $user['peran'] !== 'Super Admin')): ?>
+                                                    <!-- Tombol Edit -->
+                                                    <button class="btn btn-light btn-sm" onclick="openEditModal(<?= $user['id'] ?>)" title="Edit User">
+                                                        <i class="fas fa-edit icon-edit"></i>
+                                                    </button>
+                                                    
+                                                    <!-- Tombol Hapus -->
+                                                    <?php if ($current_user_role === 'Super Admin' || ($current_user_role === 'Admin' && $user['peran'] === 'User')): ?>
+                                                        <a href="proses/proses_hapus_user.php?id=<?= $user['id'] ?>" 
+                                                           class="btn btn-light btn-sm"
+                                                           onclick="return confirm('Hapus user <?= htmlspecialchars($user['username']) ?>? Tindakan ini tidak dapat dibatalkan!')"
+                                                           title="Hapus User">
+                                                            <i class="fas fa-trash icon-delete"></i>
+                                                        </a>
+                                                    <?php else: ?>
+                                                        <span class="badge secondary" title="Tidak dapat menghapus Admin lain">
+                                                            <i class="fas fa-trash"></i>
+                                                        </span>
+                                                    <?php endif; ?>
+                                                    
+                                                    <!-- Tombol Aktif/Nonaktif -->
+                                                    <?php if ($current_user_role === 'Super Admin' || ($current_user_role === 'Admin' && $user['peran'] === 'User')): ?>
+                                                        <?php if ($user['status_aktif']): ?>
+                                                            <a href="proses/proses_aktifkan_user.php?id=<?= $user['id'] ?>&action=deactivate" 
+                                                               class="btn btn-light btn-sm"
+                                                               onclick="return confirm('Nonaktifkan user <?= htmlspecialchars($user['username']) ?>?')"
+                                                               title="Nonaktifkan User">
+                                                                <i class="fas fa-pause icon-deactivate"></i>
+                                                            </a>
+                                                        <?php else: ?>
+                                                            <a href="proses/proses_aktifkan_user.php?id=<?= $user['id'] ?>&action=activate" 
+                                                               class="btn btn-light btn-sm"
+                                                               onclick="return confirm('Aktifkan user <?= htmlspecialchars($user['username']) ?>?')"
+                                                               title="Aktifkan User">
+                                                                <i class="fas fa-play icon-activate"></i>
+                                                            </a>
+                                                        <?php endif; ?>
+                                                    <?php else: ?>
+                                                        <span class="badge secondary" title="Tidak dapat mengubah status Admin lain">
+                                                            <i class="fas fa-ban"></i>
+                                                        </span>
+                                                    <?php endif; ?>
+                                                <?php else: ?>
+                                                    <!-- Admin tidak bisa akses Super Admin -->
+                                                    <span class="badge secondary" title="Tidak memiliki akses">
+                                                        <i class="fas fa-lock"></i>
                                                     </span>
-                                                    <span class="badge secondary" title="Tidak dapat menghapus akun sendiri">
-                                                        <i class="fas fa-trash"></i>
-                                                    </span>
-                                                    <span class="badge secondary" title="Akun sudah aktif">
-                                                        <i class="fas fa-check-circle"></i>
-                                                    </span>
-                                                </div>
+                                                <?php endif; ?>
                                             <?php endif; ?>
                                         </div>
                                     </td>
@@ -256,13 +339,19 @@ if (isset($_GET['edit_id'])) {
                     <h4 style="margin: 0 0 10px 0; font-size: 2rem;"><?= $stats['active_users'] ?></h4>
                     <p style="margin: 0; opacity: 0.9;">Pengguna Aktif</p>
                 </div>
-                <div style="background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 20px; border-radius: 10px; text-align: center;">
-                    <h4 style="margin: 0 0 10px 0; font-size: 2rem;"><?= $stats['super_admins'] ?></h4>
-                    <p style="margin: 0; opacity: 0.9;">Super Admin</p>
-                </div>
+                <?php if ($current_user_role === 'Super Admin'): ?>
+                    <div style="background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 20px; border-radius: 10px; text-align: center;">
+                        <h4 style="margin: 0 0 10px 0; font-size: 2rem;"><?= $stats['super_admins'] ?></h4>
+                        <p style="margin: 0; opacity: 0.9;">Super Admin</p>
+                    </div>
+                <?php endif; ?>
                 <div style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; padding: 20px; border-radius: 10px; text-align: center;">
                     <h4 style="margin: 0 0 10px 0; font-size: 2rem;"><?= $stats['admins'] ?></h4>
                     <p style="margin: 0; opacity: 0.9;">Admin</p>
+                </div>
+                <div style="background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; padding: 20px; border-radius: 10px; text-align: center;">
+                    <h4 style="margin: 0 0 10px 0; font-size: 2rem;"><?= $stats['regular_users'] ?></h4>
+                    <p style="margin: 0; opacity: 0.9;">User Biasa</p>
                 </div>
             </div>
         </div>
@@ -273,7 +362,13 @@ if (isset($_GET['edit_id'])) {
 <div id="addUserModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
-            <h2><i class="fas fa-user-plus"></i> Tambah User Baru</h2>
+            <h2><i class="fas fa-user-plus"></i> 
+                <?php if ($current_user_role === 'Super Admin'): ?>
+                    Tambah User Baru
+                <?php else: ?>
+                    Tambah User/Admin Baru
+                <?php endif; ?>
+            </h2>
             <button class="close" onclick="closeAddModal()">&times;</button>
         </div>
         <div class="modal-body">
@@ -282,37 +377,45 @@ if (isset($_GET['edit_id'])) {
                     <div class="form-group">
                         <label for="username">Username *</label>
                         <input type="text" id="username" name="username" required 
-                               placeholder="Masukkan username" pattern="[a-zA-Z0-9_]+">
+                               placeholder="Masukkan username" pattern="[a-zA-Z0-9_]+"
+                               value="<?= $_SESSION['old_input']['username'] ?? '' ?>">
                         <span class="form-help">Hanya huruf, angka, dan underscore</span>
                     </div>
 
                     <div class="form-group">
                         <label for="email">Email *</label>
                         <input type="email" id="email" name="email" required 
-                               placeholder="Masukkan email">
+                               placeholder="Masukkan email"
+                               value="<?= $_SESSION['old_input']['email'] ?? '' ?>">
                     </div>
                 </div>
 
                 <div class="form-group">
                     <label for="nama_user">Nama Lengkap *</label>
                     <input type="text" id="nama_user" name="nama_user" required 
-                           placeholder="Masukkan nama lengkap">
+                           placeholder="Masukkan nama lengkap"
+                           value="<?= $_SESSION['old_input']['nama_user'] ?? '' ?>">
                 </div>
 
                 <div class="form-row">
                     <div class="form-group">
                         <label for="telepon">Telepon</label>
                         <input type="text" id="telepon" name="telepon" 
-                               placeholder="Masukkan nomor telepon">
+                               placeholder="Masukkan nomor telepon"
+                               value="<?= $_SESSION['old_input']['telepon'] ?? '' ?>">
                     </div>
 
                     <div class="form-group">
                         <label for="peran">Peran *</label>
                         <select id="peran" name="peran" required>
                             <option value="">Pilih Peran</option>
-                            <option value="User">User</option>
-                            <option value="Admin">Admin</option>
-                            <option value="Super Admin">Super Admin</option>
+                            <option value="User" <?= ($_SESSION['old_input']['peran'] ?? '') === 'User' ? 'selected' : '' ?>>User</option>
+                            <?php if ($current_user_role === 'Super Admin'): ?>
+                                <option value="Admin" <?= ($_SESSION['old_input']['peran'] ?? '') === 'Admin' ? 'selected' : '' ?>>Admin</option>
+                                <option value="Super Admin" <?= ($_SESSION['old_input']['peran'] ?? '') === 'Super Admin' ? 'selected' : '' ?>>Super Admin</option>
+                            <?php else: ?>
+                                <option value="Admin" <?= ($_SESSION['old_input']['peran'] ?? '') === 'Admin' ? 'selected' : '' ?>>Admin</option>
+                            <?php endif; ?>
                         </select>
                     </div>
                 </div>
@@ -334,8 +437,8 @@ if (isset($_GET['edit_id'])) {
                 <div class="form-group">
                     <label for="status_aktif">Status Akun</label>
                     <select id="status_aktif" name="status_aktif">
-                        <option value="1" selected>Aktif</option>
-                        <option value="0">Nonaktif</option>
+                        <option value="1" <?= ($_SESSION['old_input']['status_aktif'] ?? 1) == 1 ? 'selected' : '' ?>>Aktif</option>
+                        <option value="0" <?= ($_SESSION['old_input']['status_aktif'] ?? 1) == 0 ? 'selected' : '' ?>>Nonaktif</option>
                     </select>
                 </div>
 
@@ -391,9 +494,14 @@ if (isset($_GET['edit_id'])) {
                     <div class="form-group">
                         <label for="edit_peran">Peran *</label>
                         <select id="edit_peran" name="peran" required>
-                            <option value="User">User</option>
-                            <option value="Admin">Admin</option>
-                            <option value="Super Admin">Super Admin</option>
+                            <?php if ($current_user_role === 'Super Admin'): ?>
+                                <option value="User">User</option>
+                                <option value="Admin">Admin</option>
+                                <option value="Super Admin">Super Admin</option>
+                            <?php else: ?>
+                                <option value="User">User</option>
+                                <option value="Admin">Admin</option>
+                            <?php endif; ?>
                         </select>
                     </div>
                 </div>
